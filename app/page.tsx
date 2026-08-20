@@ -6,26 +6,29 @@ export default function Home() {
   const paquetes = [
     {
       nombre: 'Paquete Inicial',
-      precio: 'S/ 20',
-      monedas: '20 Monedas',
-      descripcion: 'Ideal para eventos pequeños o probar la plataforma.',
-      link: `https://wa.me/51921543755?text=${encodeURIComponent('¡Hola V-PASS! 👋 Quisiera adquirir el Paquete Inicial de S/ 20.')}`,
+      precio: 'S/ 99',
+      monedas: '200 Monedas',
+      descripcion: '1 Sol = 2 Monedas',
+      detalles: ['🎟️ 100 Entradas', '📱 1 Validador de QR'],
+      link: `https://wa.me/51921543755?text=${encodeURIComponent('¡Hola V-PASS! 👋 Quisiera adquirir el Paquete Inicial de S/ 99 (200 Monedas).')}`,
       popular: false,
     },
     {
       nombre: 'Paquete Pro',
-      precio: 'S/ 50',
-      monedas: '60 Monedas',
-      descripcion: 'Excelente para organizar eventos medianos con pases masivos.',
-      link: `https://wa.me/51921543755?text=${encodeURIComponent('¡Hola V-PASS! 👋 Quisiera adquirir el Paquete Pro de S/ 50.')}`,
+      precio: 'S/ 150',
+      monedas: '300 Monedas',
+      descripcion: '1 Sol = 2 Monedas',
+      detalles: ['🎟️ 300 Entradas', '📱 2 Validadores en simultáneo'],
+      link: `https://wa.me/51921543755?text=${encodeURIComponent('¡Hola V-PASS! 👋 Quisiera adquirir el Paquete Pro de S/ 150 (300 Monedas).')}`,
       popular: true,
     },
     {
       nombre: 'Paquete Premium',
-      precio: 'S/ 100',
-      monedas: '130 Monedas',
-      descripcion: 'Para productores y organizadores de eventos recurrentes.',
-      link: `https://wa.me/51921543755?text=${encodeURIComponent('¡Hola V-PASS! 👋 Quisiera adquirir el Paquete Premium de S/ 100.')}`,
+      precio: 'S/ 250',
+      monedas: '500 Monedas',
+      descripcion: '1 Sol = 2 Monedas',
+      detalles: ['🎟️ 700 Entradas', '📱 5 Validadores en simultáneo'],
+      link: `https://wa.me/51921543755?text=${encodeURIComponent('¡Hola V-PASS! 👋 Quisiera adquirir el Paquete Premium de S/ 250 (500 Monedas).')}`,
       popular: false,
     },
   ];
@@ -90,7 +93,7 @@ export default function Home() {
           <div className="space-y-2">
             <h2 className="text-2xl md:text-3xl font-bold text-white">Adquiere Monedas V-PASS</h2>
             <p className="text-xs md:text-sm text-slate-400">
-              Elige el paquete que mejor se adapte a tu evento y recarga al instante por WhatsApp.
+              Valor estándar: <span className="text-amber-400 font-bold">1 Sol = 2 Monedas</span>. Elige el paquete ideal para tu evento:
             </p>
           </div>
 
@@ -107,13 +110,21 @@ export default function Home() {
                     Más Popular
                   </span>
                 )}
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <h3 className="text-lg font-bold text-white">{pkg.nombre}</h3>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-extrabold text-amber-400">{pkg.precio}</span>
                     <span className="text-xs font-semibold text-slate-400">/ {pkg.monedas}</span>
                   </div>
-                  <p className="text-xs text-slate-400">{pkg.descripcion}</p>
+                  <p className="text-xs text-amber-500/80 font-medium">{pkg.descripcion}</p>
+                  
+                  <ul className="space-y-2 pt-2 border-t border-slate-800">
+                    {pkg.detalles.map((detalle, dIdx) => (
+                      <li key={dIdx} className="text-xs text-slate-300 font-medium flex items-center gap-1.5">
+                        {detalle}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
 
                 <a
