@@ -36,8 +36,10 @@ function LoginForm() {
           // Intentar crear perfil básico
           await supabase.from('perfiles').upsert([
             { id: data.user.id, email: data.user.email, monedas: 50 }
-          ]).catch(() => {});
-
+const { data, error } = await supabase.auth.signInWithPassword(...)
+if (error) {
+  // Tu manejo de error aquí
+}
           router.replace('/dashboard');
         }
       } else {
