@@ -105,11 +105,11 @@ export default function ValidarQR() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 flex flex-col items-center font-sans">
       <header className="w-full max-w-md flex items-center justify-between pb-6 border-b border-slate-800 mb-6">
         <button 
           onClick={() => router.push('/dashboard')} 
-          className="text-amber-400 hover:text-amber-300 font-bold text-xs"
+          className="text-amber-400 hover:text-amber-300 font-bold text-xs transition"
         >
           ← Volver al Panel
         </button>
@@ -144,7 +144,7 @@ export default function ValidarQR() {
         </div>
 
         {loading && (
-          <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-xl text-center text-amber-400 font-semibold text-sm">
+          <div className="bg-slate-900 border border-amber-500/30 p-4 rounded-xl text-center text-amber-400 font-semibold text-sm animate-pulse">
             Verificando pase en la base de datos...
           </div>
         )}
