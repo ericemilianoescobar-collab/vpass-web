@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
 interface PerfilUsuario {
   id: string;
   email: string | undefined;
-  monedas: number;
+  plan_nombre?: string;
+  eventos_disponibles: number;
 }
 
 interface Evento {
@@ -24,60 +25,91 @@ export default function Dashboard() {
   const [cargando, setCargando] = useState<boolean>(true);
   const router = useRouter();
 
-  const comprobarYSincronizar = useCallback(async () => {
-    try {
-      // 1. Verificar sesión activa
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session) {
-        router.replace('/login');
-        return;
-      }
-
-      const user = session.user;
-
-      // 2. Cargar perfil del usuario
-      let { data: perfil } = await supabase
-        .from('perfiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (!perfil) {
-        perfil = { id: user.id, email: user.email, monedas: 50 };
-      }
-
-      setUsuario(perfil);
-
-      // 3. Cargar eventos asociados
-      const { data: evs } = await supabase
-        .from('eventos')
-        .select('*')
-        .eq('usuario_id', user.id)
-        .order('created_at', { ascending: false });
-
-      setEventos(evs || []);
-    } catch (e) {
-      console.error('Error al sincronizar el Dashboard:', e);
-    } finally {
-      setCargando(false);
-    }
-  }, [router]);
-
   useEffect(() => {
+    let isMounted = true;
+
+    const comprobarYSincronizar = async () => {
+      try {
+        // 1. Verificar sesión de usuario
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session) {
+          router.replace('/login');
+          return;
+        }
+
+        const user = session.user;
+
+        // 2. Cargar perfil del usuario desde Supabase
+        let { data: perfil } = await supabase
+          .from('perfiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (!perfil) {
+          perfil = {
+            id: user.id,
+            email: user.email,
+            plan_nombre: 'Sin Plan Activo',
+            eventos_disponibles: 0,
+          };
+        }
+
+        if (isMounted) {
+          setUsuario({
+            id: perfil.id,
+            email: perfil.email,
+            plan_nombre: perfil.plan_nombre || 'Sin Plan Activo',
+            eventos_disponibles: perfil.eventos_disponibles ?? 0,
+          });
+        }
+
+        // 3. Cargar lista de eventos creados
+        const { data: evs } = await supabase
+          .from('eventos')
+          .select('*')
+          .eq('usuario_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (isMounted) {
+          setEventos(evs || []);
+        }
+      } catch (e) {
+        console.error('Error al sincronizar el Dashboard:', e);
+      } finally {
+        if (isMounted) {
+          setCargando(false);
+        }
+      }
+    };
+
     comprobarYSincronizar();
-  }, [comprobarYSincronizar]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
 
   const cerrarSesion = async () => {
     await supabase.auth.signOut();
     router.replace('/login');
   };
 
-  const solicitarRecarga = () => {
+  const solicitarPlan = () => {
     const email = usuario?.email ?? 'usuario';
-    const textoMensaje = `¡Hola equipo de V-PASS! 👋\n\nSolicito información para recargar monedas en mi cuenta.\n📌 *Usuario:* ${email}\n\nQuedo a la espera de los métodos de pago. ¡Gracias!`;
+    const textoMensaje = `¡Hola equipo de V-PASS! 👋\n\nQuiero contratar/renovar un plan para mis eventos.\n📌 *Usuario:* ${email}\n\nQuedo a la espera de la activación. ¡Gracias!`;
     const urlWhatsApp = `https://wa.me/51921543755?text=${encodeURIComponent(textoMensaje)}`;
     window.open(urlWhatsApp, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCrearEvento = () => {
+    if (!usuario || usuario.eventos_disponibles <= 0) {
+      alert('No tienes eventos disponibles en tu plan actual. Por favor, adquiere un plan por WhatsApp para publicar tu evento.');
+      solicitarPlan();
+      return;
+    }
+    router.push('/nuevo-evento');
   };
 
   if (cargando) {
@@ -89,33 +121,57 @@ export default function Dashboard() {
     );
   }
 
+  const tieneEventosDisponibles = (usuario?.eventos_disponibles ?? 0) > 0;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* Cabecera Principal */}
+        {/* Cabecera Principal (REEMPLAZADO 'VP' Y 'MONEDAS') */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-900 border border-slate-800 rounded-2xl p-6 gap-4 shadow-xl">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-amber-500 rounded-lg flex items-center justify-center font-black text-slate-950 text-xs shadow-md shadow-amber-500/20">
-                VP
+            <div className="flex items-center gap-3">
+              {/* Contenedor preparado para tu LOGO */}
+              <div className="w-9 h-9 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center overflow-hidden">
+                <img 
+                  src="/logo.png" 
+                  alt="Logo" 
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    // Muestra un ícono temporal de imagen mientras subes el archivo /public/logo.png
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+                <span className="text-xs text-slate-500 font-bold">📷</span>
               </div>
-              <h1 className="text-lg font-bold text-white">Panel de Control V-PASS</h1>
+              <h1 className="text-lg font-bold text-white tracking-wide">Panel de Control V-PASS</h1>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Usuario: <span className="text-slate-300 font-medium">{usuario?.email}</span></p>
+            <p className="text-xs text-slate-400 mt-1">
+              Usuario: <span className="text-slate-300 font-medium">{usuario?.email}</span>
+            </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="bg-slate-950 border border-amber-500/30 px-4 py-2 rounded-xl flex items-center gap-2">
-              <span className="text-amber-400 font-extrabold text-sm">🪙 {usuario?.monedas ?? 50}</span>
-              <span className="text-xs text-slate-400">Monedas</span>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Cajas de Planes en reemplazo de Monedas */}
+            <div className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3">
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Plan Activo</p>
+                <p className="text-xs font-bold text-amber-400">{usuario?.plan_nombre}</p>
+              </div>
+              <div className="h-6 w-px bg-slate-800"></div>
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Disponibles</p>
+                <p className={`text-xs font-extrabold ${tieneEventosDisponibles ? 'text-emerald-400' : 'text-rose-500'}`}>
+                  {usuario?.eventos_disponibles} evento(s)
+                </p>
+              </div>
             </div>
 
             <button
-              onClick={solicitarRecarga}
+              onClick={solicitarPlan}
               className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center gap-1 shadow-md shadow-emerald-500/10"
             >
-              💬 Recargar
+              💬 Adquirir Plan
             </button>
 
             <button
@@ -131,23 +187,41 @@ export default function Dashboard() {
         <div className="flex justify-between items-center">
           <h2 className="text-base font-bold text-white">Mis Eventos Activos</h2>
           <button
-            onClick={() => router.push('/nuevo-evento')}
-            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-xs transition shadow-lg shadow-amber-500/10"
+            onClick={handleCrearEvento}
+            className={`font-bold px-4 py-2.5 rounded-xl text-xs transition shadow-lg ${
+              tieneEventosDisponibles
+                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/10'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+            }`}
           >
             + Crear Evento
           </button>
         </div>
 
-        {/* Listado o Estado Vacío */}
+        {/* Listado de Eventos o Estado Vacío */}
         {eventos.length === 0 ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-3 shadow-inner">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-4 shadow-inner">
             <p className="text-xs text-slate-400">Aún no has creado ningún evento en V-PASS.</p>
-            <button
-              onClick={() => router.push('/nuevo-evento')}
-              className="bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold px-4 py-2 rounded-xl text-xs border border-amber-500/20 transition"
-            >
-              Crear tu primer evento
-            </button>
+            {tieneEventosDisponibles ? (
+              <button
+                onClick={handleCrearEvento}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition shadow-md"
+              >
+                Crear tu primer evento
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-amber-400/90 font-medium">
+                  Para publicar tu primer evento necesitas adquirir o activar uno de nuestros planes.
+                </p>
+                <button
+                  onClick={solicitarPlan}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition shadow-md"
+                >
+                  💬 Solicitar un Plan por WhatsApp
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
