@@ -30,7 +30,7 @@ export default function Dashboard() {
 
     const comprobarYSincronizar = async () => {
       try {
-        // 1. Verificar sesión activa
+        // 1. Verificar sesión
         const { data: { session } } = await supabase.auth.getSession();
 
         if (!session) {
@@ -65,7 +65,7 @@ export default function Dashboard() {
           });
         }
 
-        // 3. Cargar eventos creados
+        // 3. Cargar eventos
         const { data: evs } = await supabase
           .from('eventos')
           .select('*')
@@ -98,14 +98,14 @@ export default function Dashboard() {
 
   const solicitarPlan = () => {
     const email = usuario?.email ?? 'usuario';
-    const textoMensaje = `¡Hola equipo de V-PASS! 👋\n\nQuiero contratar/renovar un plan para mis eventos.\n📌 *Usuario:* ${email}\n\nQuedo a la espera de los datos para la activación. ¡Gracias!`;
+    const textoMensaje = `¡Hola equipo de V-PASS! 👋\n\nQuiero contratar/renovar un plan para mis eventos.\n📌 *Usuario:* ${email}\n\nQuedo a la espera de la activación. ¡Gracias!`;
     const urlWhatsApp = `https://wa.me/51921543755?text=${encodeURIComponent(textoMensaje)}`;
     window.open(urlWhatsApp, '_blank', 'noopener,noreferrer');
   };
 
   const handleCrearEvento = () => {
     if (!usuario || usuario.eventos_disponibles <= 0) {
-      alert('No tienes eventos disponibles en tu plan actual. Por favor, adquiere un plan para crear tu evento.');
+      alert('No tienes eventos disponibles en tu plan actual. Por favor, adquiere un plan para poder crear un evento.');
       solicitarPlan();
       return;
     }
@@ -127,13 +127,20 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* Cabecera Principal */}
+        {/* Cabecera Principal (SIN MONEDAS / CON LOGO) */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-900 border border-slate-800 rounded-2xl p-6 gap-4 shadow-xl">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-amber-500 rounded-lg flex items-center justify-center font-black text-slate-950 text-xs shadow-md shadow-amber-500/20">
-                VP
-              </div>
+            <div className="flex items-center gap-3">
+              {/* Espacio preparado para tu logo */}
+              <img 
+                src="/logo.png" 
+                alt="Logo V-PASS" 
+                className="w-8 h-8 object-contain"
+                onError={(e) => {
+                  // Fallback visual si aún no colocas la imagen en public/logo.png
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
               <h1 className="text-lg font-bold text-white">Panel de Control V-PASS</h1>
             </div>
             <p className="text-xs text-slate-400 mt-1">
@@ -142,7 +149,7 @@ export default function Dashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* Indicador de Plan y Eventos Disponibles */}
+            {/* Estado de Planes Activos */}
             <div className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3">
               <div>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Plan Activo</p>
@@ -194,7 +201,7 @@ export default function Dashboard() {
             <p className="text-xs text-slate-400">Aún no has creado ningún evento en V-PASS.</p>
             {tieneEventosDisponibles ? (
               <button
-                onClick={() => router.push('/nuevo-evento')}
+                onClick={handleCrearEvento}
                 className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition shadow-md"
               >
                 Crear tu primer evento
@@ -202,7 +209,7 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-2">
                 <p className="text-xs text-amber-400/90 font-medium">
-                  Para publicar tu primer evento necesitas activar uno de nuestros planes.
+                  Para publicar tu primer evento necesitas adquirir o activar uno de nuestros planes.
                 </p>
                 <button
                   onClick={solicitarPlan}
