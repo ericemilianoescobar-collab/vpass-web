@@ -30,9 +30,9 @@ export default function NuevoEvento() {
 
       if (userPerfil) {
         setPerfil(userPerfil);
-        if (userPerfil.plan_basico_cant > 0) setPlanSeleccionado('basico');
-        else if (userPerfil.plan_estandar_cant > 0) setPlanSeleccionado('estandar');
-        else if (userPerfil.plan_premium_cant > 0) setPlanSeleccionado('premium');
+        if ((userPerfil.plan_basico_cant ?? 0) > 0) setPlanSeleccionado('basico');
+        else if ((userPerfil.plan_estandar_cant ?? 0) > 0) setPlanSeleccionado('estandar');
+        else if ((userPerfil.plan_premium_cant ?? 0) > 0) setPlanSeleccionado('premium');
       }
       setCargando(false);
     };
@@ -63,34 +63,38 @@ export default function NuevoEvento() {
 
       const limiteActual = limitesPlan[planSeleccionado];
 
-      // 1. Insertar Evento
+      // Insertar evento enviando tanto organizador_id como usuario_id por compatibilidad
       const { error: errEv } = await supabase.from('eventos').insert([
         {
+          organizador_id: session.user.id,
           usuario_id: session.user.id,
-          nombre,
-          fecha,
-          hora,
+          nombre: nombre,
+          fecha: fecha,
+          hora: hora,
           capacidad: limiteActual.capacidad,
           plan_utilizado: limiteActual.label,
           validadores_permitidos: limiteActual.validadores
         },
       ]);
 
-      if (errEv) throw errEv;
+      if (errEv) {
+        console.error('Error Supabase:', errEv);
+        alert(`Error al guardar: ${errEv.message}`);
+        setGuardando(false);
+        return;
+      }
 
-      // 2. Descontar plan de la cuenta
-      const nuevoSaldo = perfil[campoCant] - 1;
-      const { error: errPerfil } = await supabase
+      // Descontar plan del perfil
+      const nuevoSaldo = Math.max(0, (perfil[campoCant] ?? 1) - 1);
+      await supabase
         .from('perfiles')
         .update({ [campoCant]: nuevoSaldo })
         .eq('id', session.user.id);
 
-      if (errPerfil) throw errPerfil;
-
       router.push('/dashboard');
-    } catch (err) {
-      console.error(err);
-      alert('Error al guardar evento.');
+    } catch (err: any) {
+      console.error('Error general:', err);
+      alert(`Error inesperado: ${err.message || 'Error al guardar'}`);
     } finally {
       setGuardando(false);
     }
@@ -108,7 +112,6 @@ export default function NuevoEvento() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center">
-                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 <span className="text-[10px] font-bold text-cyan-400">VP</span>
               </div>
               <h1 className="text-lg font-bold text-white">Configurar Nuevo Evento</h1>
@@ -118,8 +121,6 @@ export default function NuevoEvento() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          
-          {/* Selección del Plan a Consumir */}
           <div>
             <label className="block text-xs font-bold text-slate-300 mb-1">Seleccionar Plan a Consumir</label>
             <select
@@ -192,7 +193,6 @@ export default function NuevoEvento() {
             ← Cancelar y volver al Panel
           </button>
         </div>
-
       </div>
     </div>
   );
