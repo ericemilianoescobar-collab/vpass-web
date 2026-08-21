@@ -1,113 +1,90 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
-export default function LoginPage() {
-  const router = useRouter()
-  const [isLogin, setIsLogin] = useState(true)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [errorMsg, setErrorMsg] = useState('')
-  const [cargando, setCargando] = useState(false)
+export default function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [cargando, setCargando] = useState(false);
+  const [mensaje, setMensaje] = useState<string | null>(null);
+  const router = useRouter();
 
   const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErrorMsg('')
-    setCargando(true)
+    e.preventDefault();
+    setCargando(true);
+    setMensaje(null);
 
-    try {
-      if (!isLogin) {
-        // Registro de usuario
-        const { data, error } = await supabase.auth.signUp({ email, password })
-        if (error) {
-          setErrorMsg(error.message)
-          setCargando(false)
-          return
-        }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-        if (data?.user) {
-          // Crear perfil básico si existe la tabla perfiles
-          await supabase.from('perfiles').upsert([
-            { id: data.user.id, email: data.user.email, monedas: 50 }
-          ])
-        }
-        router.replace('/dashboard')
-      } else {
-        // Inicio de sesión
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) {
-          setErrorMsg(error.message)
-          setCargando(false)
-          return
-        }
-        router.replace('/dashboard')
-      }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Ocurrió un error inesperado')
-    } finally {
-      setCargando(false)
+    if (error) {
+      setMensaje(error.message);
+      setCargando(false);
+    } else {
+      router.push('/dashboard');
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-        <h1 className="text-2xl font-bold text-amber-400 text-center mb-6">
-          {isLogin ? 'Iniciar Sesión en V-PASS' : 'Crear Cuenta en V-PASS'}
-        </h1>
-
-        {errorMsg && (
-          <div className="mb-4 p-3 bg-red-500/20 border border-red-500 text-red-300 text-sm rounded-lg text-center">
-            {errorMsg}
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+      <div className="max-w-sm w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 space-y-6 shadow-2xl">
+        
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 bg-slate-950 border border-slate-800 rounded-2xl mx-auto flex items-center justify-center overflow-hidden">
+            <img 
+              src="/logo.png" 
+              alt="Logo V-PASS" 
+              className="w-full h-full object-contain"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+            <span className="text-sm font-bold text-cyan-400">VP</span>
           </div>
-        )}
+          <h1 className="text-xl font-extrabold text-white">Iniciar Sesión en V-PASS</h1>
+          <p className="text-xs text-slate-400">Accede a tu panel de eventos VIP</p>
+        </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Correo Electrónico</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">Correo Electrónico</label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-amber-400"
               placeholder="tu@correo.com"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Contraseña</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">Contraseña</label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-amber-400"
               placeholder="••••••••"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
             />
           </div>
+
+          {mensaje && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs text-center font-medium">
+              {mensaje}
+            </div>
+          )}
 
           <button
             type="submit"
             disabled={cargando}
-            className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold py-3 rounded-lg transition-colors mt-2"
+            className="w-full bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-extrabold py-3 rounded-xl text-xs transition shadow-lg shadow-cyan-500/20"
           >
-            {cargando ? 'Procesando...' : isLogin ? 'Ingresar' : 'Registrarse'}
+            {cargando ? 'Ingresando...' : 'Entrar a mi Cuenta'}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-slate-400">
-          {isLogin ? '¿No tienes una cuenta? ' : '¿Ya tienes una cuenta? '}
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-amber-400 underline font-semibold"
-          >
-            {isLogin ? 'Regístrate aquí' : 'Inicia sesión'}
-          </button>
-        </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,246 +1,179 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-interface PerfilUsuario {
-  id: string;
-  email: string | undefined;
-  plan_nombre?: string;
-  eventos_disponibles: number;
-}
-
-interface Evento {
-  id: string;
-  nombre: string;
-  fecha: string;
-  hora?: string;
-  capacidad: number;
-}
-
-export default function Dashboard() {
-  const [usuario, setUsuario] = useState<PerfilUsuario | null>(null);
-  const [eventos, setEventos] = useState<Evento[]>([]);
-  const [cargando, setCargando] = useState<boolean>(true);
-  const router = useRouter();
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const comprobarYSincronizar = async () => {
-      try {
-        // 1. Verificar sesión
-        const { data: { session } } = await supabase.auth.getSession();
-
-        if (!session) {
-          router.replace('/login');
-          return;
-        }
-
-        const user = session.user;
-
-        // 2. Cargar perfil del usuario
-        let { data: perfil } = await supabase
-          .from('perfiles')
-          .select('*')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (!perfil) {
-          perfil = {
-            id: user.id,
-            email: user.email,
-            plan_nombre: 'Sin Plan Activo',
-            eventos_disponibles: 0,
-          };
-        }
-
-        if (isMounted) {
-          setUsuario({
-            id: perfil.id,
-            email: perfil.email,
-            plan_nombre: perfil.plan_nombre || 'Sin Plan Activo',
-            eventos_disponibles: perfil.eventos_disponibles ?? 0,
-          });
-        }
-
-        // 3. Cargar eventos
-        const { data: evs } = await supabase
-          .from('eventos')
-          .select('*')
-          .eq('usuario_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (isMounted) {
-          setEventos(evs || []);
-        }
-      } catch (e) {
-        console.error('Error al sincronizar el Dashboard:', e);
-      } finally {
-        if (isMounted) {
-          setCargando(false);
-        }
-      }
-    };
-
-    comprobarYSincronizar();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
-
-  const cerrarSesion = async () => {
-    await supabase.auth.signOut();
-    router.replace('/login');
-  };
-
-  const solicitarPlan = () => {
-    const email = usuario?.email ?? 'usuario';
-    const textoMensaje = `¡Hola equipo de V-PASS! 👋\n\nQuiero contratar/renovar un plan para mis eventos.\n📌 *Usuario:* ${email}\n\nQuedo a la espera de la activación. ¡Gracias!`;
-    const urlWhatsApp = `https://wa.me/51921543755?text=${encodeURIComponent(textoMensaje)}`;
-    window.open(urlWhatsApp, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleCrearEvento = () => {
-    if (!usuario || usuario.eventos_disponibles <= 0) {
-      alert('No tienes eventos disponibles en tu plan actual. Por favor, adquiere un plan para poder crear un evento.');
-      solicitarPlan();
-      return;
-    }
-    router.push('/nuevo-evento');
-  };
-
-  if (cargando) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3 text-slate-100">
-        <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-xs font-bold text-amber-400">Cargando Panel V-PASS...</p>
-      </div>
-    );
-  }
-
-  const tieneEventosDisponibles = (usuario?.eventos_disponibles ?? 0) > 0;
+export default function Home() {
+  const planes = [
+    {
+      nombre: 'Plan Básico',
+      precio: 'S/ 99',
+      entradas: '150 Entradas VIP',
+      validadores: '1 Validador (QR / Manual)',
+      descripcion: 'Perfecto para fiestas privadas y eventos íntimos.',
+      popular: false,
+    },
+    {
+      nombre: 'Plan Estándar',
+      precio: 'S/ 150',
+      entradas: '300 Entradas VIP',
+      validadores: '2 Validadores en Simultáneo',
+      descripcion: 'Ideal para discotecas, clubes y eventos medianos.',
+      popular: true,
+    },
+    {
+      nombre: 'Plan Premium',
+      precio: 'S/ 200',
+      entradas: '500 Entradas VIP',
+      validadores: '5 Validadores en Simultáneo',
+      descripcion: 'Para grandes producciones, festivales y recintos masivos.',
+      popular: false,
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
-      <div className="max-w-5xl mx-auto space-y-6">
-        
-        {/* Cabecera Principal (SIN MONEDAS / CON LOGO) */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-900 border border-slate-800 rounded-2xl p-6 gap-4 shadow-xl">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col justify-between selection:bg-cyan-500 selection:text-slate-950">
+      
+      {/* Cabecera / Navegación */}
+      <header className="max-w-7xl mx-auto w-full p-6 flex justify-between items-center border-b border-slate-900">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-center overflow-hidden shadow-lg shadow-cyan-500/5">
+            <img 
+              src="/logo.png" 
+              alt="V-PASS Logo" 
+              className="w-full h-full object-contain" 
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+            <span className="text-xs font-bold text-cyan-400">VP</span>
+          </div>
           <div>
-            <div className="flex items-center gap-3">
-              {/* Espacio preparado para tu logo */}
-              <img 
-                src="/logo.png" 
-                alt="Logo V-PASS" 
-                className="w-8 h-8 object-contain"
-                onError={(e) => {
-                  // Fallback visual si aún no colocas la imagen en public/logo.png
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-              <h1 className="text-lg font-bold text-white">Panel de Control V-PASS</h1>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Usuario: <span className="text-slate-300 font-medium">{usuario?.email}</span>
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Estado de Planes Activos */}
-            <div className="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3">
-              <div>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Plan Activo</p>
-                <p className="text-xs font-bold text-amber-400">{usuario?.plan_nombre}</p>
-              </div>
-              <div className="h-6 w-px bg-slate-800"></div>
-              <div>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Disponibles</p>
-                <p className={`text-xs font-extrabold ${tieneEventosDisponibles ? 'text-emerald-400' : 'text-rose-500'}`}>
-                  {usuario?.eventos_disponibles} evento(s)
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={solicitarPlan}
-              className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs transition flex items-center gap-1 shadow-md shadow-emerald-500/10"
-            >
-              💬 Adquirir Plan
-            </button>
-
-            <button
-              onClick={cerrarSesion}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-2 rounded-xl text-xs transition border border-slate-700"
-            >
-              Salir
-            </button>
+            <span className="text-xl font-black text-white tracking-wider block leading-none">V-PASS</span>
+            <span className="text-[10px] text-cyan-400 font-semibold uppercase tracking-widest">Access Systems</span>
           </div>
         </div>
 
-        {/* Sección de Eventos */}
-        <div className="flex justify-between items-center">
-          <h2 className="text-base font-bold text-white">Mis Eventos Activos</h2>
-          <button
-            onClick={handleCrearEvento}
-            className={`font-bold px-4 py-2.5 rounded-xl text-xs transition shadow-lg ${
-              tieneEventosDisponibles
-                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-amber-500/10'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-            }`}
+        <div className="flex items-center gap-3">
+          <Link
+            href="/login"
+            className="text-xs font-bold text-slate-300 hover:text-white px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition"
           >
-            + Crear Evento
-          </button>
+            Iniciar Sesión
+          </Link>
+          <Link
+            href="/login"
+            className="text-xs font-bold text-slate-950 bg-cyan-400 hover:bg-cyan-300 px-5 py-2.5 rounded-xl transition shadow-lg shadow-cyan-500/20"
+          >
+            Comenzar Ahora
+          </Link>
+        </div>
+      </header>
+
+      {/* Hero Principal */}
+      <main className="max-w-7xl mx-auto w-full px-6 py-16 space-y-20">
+        <div className="text-center space-y-6 max-w-3xl mx-auto">
+          <div className="inline-flex items-center gap-2 bg-cyan-950/60 border border-cyan-500/30 text-cyan-400 text-xs font-bold px-4 py-1.5 rounded-full shadow-inner">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+            Plataforma Profesional de Control de Accesos y Entradas QR
+          </div>
+          <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight">
+            Seguridad y Elegancia para tus Eventos VIP
+          </h1>
+          <p className="text-slate-400 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
+            Elimina la duplicación de pases, controla los accesos en tiempo real con escáner QR y genera reportes detallados en Excel al finalizar.
+          </p>
+          <div className="flex justify-center gap-4 pt-2">
+            <Link
+              href="/login"
+              className="bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-extrabold text-xs md:text-sm px-8 py-3.5 rounded-xl transition shadow-xl shadow-cyan-500/20"
+            >
+              Probar Sistema V-PASS
+            </Link>
+            <a
+              href="#planes"
+              className="bg-slate-900 hover:bg-slate-800 text-slate-200 font-bold text-xs md:text-sm px-8 py-3.5 rounded-xl border border-slate-800 transition"
+            >
+              Ver Planes y Precios
+            </a>
+          </div>
         </div>
 
-        {/* Listado o Estado Vacío */}
-        {eventos.length === 0 ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center space-y-4 shadow-inner">
-            <p className="text-xs text-slate-400">Aún no has creado ningún evento en V-PASS.</p>
-            {tieneEventosDisponibles ? (
-              <button
-                onClick={handleCrearEvento}
-                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition shadow-md"
-              >
-                Crear tu primer evento
-              </button>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs text-amber-400/90 font-medium">
-                  Para publicar tu primer evento necesitas adquirir o activar uno de nuestros planes.
-                </p>
-                <button
-                  onClick={solicitarPlan}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition shadow-md"
-                >
-                  💬 Solicitar un Plan por WhatsApp
-                </button>
-              </div>
-            )}
+        {/* Sección de Garantía y Confianza */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
+          <div className="bg-slate-900/50 border border-slate-800/80 p-6 rounded-2xl space-y-2">
+            <span className="text-2xl">🔒</span>
+            <h3 className="font-bold text-white text-sm">QR Único Antifraude</h3>
+            <p className="text-xs text-slate-400">Cada entrada cuenta con firma digital. Un pase escaneado no puede volver a ser reutilizado.</p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {eventos.map((ev) => (
-              <div key={ev.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3 flex flex-col justify-between shadow-lg hover:border-slate-700 transition">
-                <div>
-                  <h3 className="font-bold text-white text-sm">{ev.nombre}</h3>
-                  <p className="text-xs text-slate-400 mt-1">📅 {ev.fecha} — ⏰ {ev.hora || '20:00'}</p>
-                  <p className="text-xs text-slate-400">🎟️ Capacidad: {ev.capacidad} pases</p>
+          <div className="bg-slate-900/50 border border-slate-800/80 p-6 rounded-2xl space-y-2">
+            <span className="text-2xl">⚡</span>
+            <h3 className="font-bold text-white text-sm">Validación Ultra Rápida</h3>
+            <p className="text-xs text-slate-400">Validación fluida mediante cámara móvil o digitación manual de código por parte de tus validadores.</p>
+          </div>
+          <div className="bg-slate-900/50 border border-slate-800/80 p-6 rounded-2xl space-y-2">
+            <span className="text-2xl">📊</span>
+            <h3 className="font-bold text-white text-sm">Reportes en Excel</h3>
+            <p className="text-xs text-slate-400">Descarga la lista de asistentes con nombre, fecha y hora exacta de registro directamente a Excel.</p>
+          </div>
+        </div>
+
+        {/* Sección de Planes */}
+        <section id="planes" className="space-y-10 pt-10">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl md:text-4xl font-extrabold text-white">Planes Comerciales</h2>
+            <p className="text-xs md:text-sm text-slate-400">Selecciona el paquete adecuado para la escala de tu evento.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {planes.map((plan, idx) => (
+              <div
+                key={idx}
+                className={`relative bg-slate-900 border ${
+                  plan.popular ? 'border-cyan-400 shadow-2xl shadow-cyan-500/10' : 'border-slate-800'
+                } rounded-2xl p-7 flex flex-col justify-between space-y-6 transition hover:border-slate-700`}
+              >
+                {plan.popular && (
+                  <span className="absolute -top-3 right-6 bg-cyan-400 text-slate-950 font-black text-[10px] uppercase px-3 py-1 rounded-full tracking-wider">
+                    Recomendado
+                  </span>
+                )}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold text-white">{plan.nombre}</h3>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-cyan-400">{plan.precio}</span>
+                    <span className="text-xs text-slate-500 font-semibold">/ por evento</span>
+                  </div>
+                  <p className="text-xs text-slate-400">{plan.descripcion}</p>
+                  
+                  <div className="pt-4 border-t border-slate-800 space-y-2.5">
+                    <div className="flex items-center gap-2 text-xs text-slate-200">
+                      <span className="text-cyan-400 font-bold">✓</span> {plan.entradas}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-200">
+                      <span className="text-cyan-400 font-bold">✓</span> {plan.validadores}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-200">
+                      <span className="text-cyan-400 font-bold">✓</span> Exportación a Excel
+                    </div>
+                  </div>
                 </div>
-                <button
-                  onClick={() => router.push(`/evento/${ev.id}`)}
-                  className="w-full bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold py-2 rounded-xl text-xs border border-slate-700 transition text-center"
+
+                <a
+                  href={`https://wa.me/51921543755?text=${encodeURIComponent(`¡Hola V-PASS! 👋 Deseo adquirir el ${plan.nombre} (${plan.precio}).`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-center bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold py-3 px-4 rounded-xl text-xs transition shadow-lg shadow-emerald-500/10 block"
                 >
-                  Administrar Evento →
-                </button>
+                  💬 Solicitar Plan vía WhatsApp
+                </a>
               </div>
             ))}
           </div>
-        )}
+        </section>
+      </main>
 
-      </div>
+      {/* Footer */}
+      <footer className="border-t border-slate-900 py-8 text-center text-xs text-slate-500">
+        © {new Date().getFullYear()} V-PASS Access Systems. Todos los derechos reservados.
+      </footer>
     </div>
   );
 }

@@ -8,9 +8,8 @@ export default function NuevoEvento() {
   const [nombre, setNombre] = useState('');
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('');
-  const [capacidad, setCapacidad] = useState(150);
-  const [eventosDisponibles, setEventosDisponibles] = useState<number>(0);
-  const [planNombre, setPlanNombre] = useState<string>('Sin Plan Activo');
+  const [planSeleccionado, setPlanSeleccionado] = useState<'basico' | 'estandar' | 'premium'>('basico');
+  const [perfil, setPerfil] = useState<any>(null);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const router = useRouter();
@@ -23,15 +22,17 @@ export default function NuevoEvento() {
         return;
       }
 
-      const { data: perfil } = await supabase
+      const { data: userPerfil } = await supabase
         .from('perfiles')
-        .select('eventos_disponibles, plan_nombre')
+        .select('*')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (perfil) {
-        setEventosDisponibles(perfil.eventos_disponibles ?? 0);
-        setPlanNombre(perfil.plan_nombre || 'Sin Plan Activo');
+      if (userPerfil) {
+        setPerfil(userPerfil);
+        if (userPerfil.plan_basico_cant > 0) setPlanSeleccionado('basico');
+        else if (userPerfil.plan_estandar_cant > 0) setPlanSeleccionado('estandar');
+        else if (userPerfil.plan_premium_cant > 0) setPlanSeleccionado('premium');
       }
       setCargando(false);
     };
@@ -39,11 +40,18 @@ export default function NuevoEvento() {
     cargarPerfil();
   }, [router]);
 
+  const limitesPlan = {
+    basico: { capacidad: 150, validadores: 1, label: 'Plan Básico' },
+    estandar: { capacidad: 300, validadores: 2, label: 'Plan Estándar' },
+    premium: { capacidad: 500, validadores: 5, label: 'Plan Premium' },
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (eventosDisponibles <= 0) {
-      alert('No tienes eventos disponibles en tu plan. Por favor adquiere un plan por WhatsApp.');
+    const campoCant = `plan_${planSeleccionado}_cant`;
+    if (!perfil || (perfil[campoCant] ?? 0) <= 0) {
+      alert(`No tienes saldo disponible en el ${limitesPlan[planSeleccionado].label}.`);
       return;
     }
 
@@ -53,77 +61,87 @@ export default function NuevoEvento() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // 1. Crear el evento
-      const { error: errorEvento } = await supabase.from('eventos').insert([
+      const limiteActual = limitesPlan[planSeleccionado];
+
+      // 1. Insertar Evento
+      const { error: errEv } = await supabase.from('eventos').insert([
         {
           usuario_id: session.user.id,
           nombre,
           fecha,
           hora,
-          capacidad,
+          capacidad: limiteActual.capacidad,
+          plan_utilizado: limiteActual.label,
+          validadores_permitidos: limiteActual.validadores
         },
       ]);
 
-      if (errorEvento) throw errorEvento;
+      if (errEv) throw errEv;
 
-      // 2. Descontar 1 evento disponible del usuario
-      const { error: errorPerfil } = await supabase
+      // 2. Descontar plan de la cuenta
+      const nuevoSaldo = perfil[campoCant] - 1;
+      const { error: errPerfil } = await supabase
         .from('perfiles')
-        .update({ eventos_disponibles: eventosDisponibles - 1 })
+        .update({ [campoCant]: nuevoSaldo })
         .eq('id', session.user.id);
 
-      if (errorPerfil) throw errorPerfil;
+      if (errPerfil) throw errPerfil;
 
       router.push('/dashboard');
     } catch (err) {
       console.error(err);
-      alert('Ocurrió un error al crear el evento.');
+      alert('Error al guardar evento.');
     } finally {
       setGuardando(false);
     }
   };
 
   if (cargando) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-amber-400 text-xs font-bold">
-        Cargando...
-      </div>
-    );
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-cyan-400 text-xs font-bold">Cargando...</div>;
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-2xl">
         
-        {/* Cabecera con Logo e Indicador de Plan */}
         <div className="flex justify-between items-start">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <img src="/logo.png" alt="V-PASS Logo" className="w-7 h-7 object-contain" />
-              <h1 className="text-xl font-bold text-white">Crear Nuevo Evento</h1>
+              <div className="w-7 h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center">
+                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                <span className="text-[10px] font-bold text-cyan-400">VP</span>
+              </div>
+              <h1 className="text-lg font-bold text-white">Configurar Nuevo Evento</h1>
             </div>
-            <p className="text-xs text-slate-400">Publica tu flyer y genera tus accesos QR</p>
-          </div>
-
-          <div className="bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-right">
-            <p className="text-[9px] text-slate-500 font-bold uppercase">Plan: {planNombre}</p>
-            <p className={`text-xs font-black ${eventosDisponibles > 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
-              {eventosDisponibles} Disponible(s)
-            </p>
+            <p className="text-xs text-slate-400">Ingresa la información básica de tu fiesta</p>
           </div>
         </div>
 
-        {/* Formulario */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          
+          {/* Selección del Plan a Consumir */}
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">Nombre del Evento / Fiesta</label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">Seleccionar Plan a Consumir</label>
+            <select
+              value={planSeleccionado}
+              onChange={(e) => setPlanSeleccionado(e.target.value as any)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
+            >
+              <option value="basico">Plan Básico ({perfil?.plan_basico_cant ?? 0} disp. - Max 150 pases / 1 Validador)</option>
+              <option value="estandar">Plan Estándar ({perfil?.plan_estandar_cant ?? 0} disp. - Max 300 pases / 2 Validadores)</option>
+              <option value="premium">Plan Premium ({perfil?.plan_premium_cant ?? 0} disp. - Max 500 pases / 5 Validadores)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-300 mb-1">Nombre del Evento</label>
             <input
               type="text"
               required
               placeholder="Ej: Neon Party VIP"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
             />
           </div>
 
@@ -135,7 +153,7 @@ export default function NuevoEvento() {
                 required
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
               />
             </div>
             <div>
@@ -145,37 +163,24 @@ export default function NuevoEvento() {
                 required
                 value={hora}
                 onChange={(e) => setHora(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-cyan-400"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">Capacidad Estimada (Pases VIP)</label>
-            <input
-              type="number"
-              required
-              value={capacidad}
-              onChange={(e) => setCapacidad(Number(e.target.value))}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
-            />
-          </div>
-
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-center space-y-1">
-            <p className="text-xs text-slate-400">Consumo al publicar:</p>
-            <p className="text-sm font-extrabold text-amber-400">1 Crédito de Evento</p>
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-1 text-center">
+            <p className="text-[10px] text-slate-500 uppercase font-bold">Límites del evento</p>
+            <p className="text-xs font-extrabold text-cyan-400">
+              {limitesPlan[planSeleccionado].capacidad} Entradas | {limitesPlan[planSeleccionado].validadores} Acceso(s) Validador
+            </p>
           </div>
 
           <button
             type="submit"
-            disabled={guardando || eventosDisponibles <= 0}
-            className={`w-full py-3 rounded-xl font-extrabold text-xs transition ${
-              eventosDisponibles > 0
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/10'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-            }`}
+            disabled={guardando}
+            className="w-full bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-extrabold py-3 rounded-xl text-xs transition shadow-lg shadow-cyan-500/20"
           >
-            {guardando ? 'Publicando...' : 'Confirmar y Publicar Evento'}
+            {guardando ? 'Guardando...' : 'Publicar Evento'}
           </button>
         </form>
 
