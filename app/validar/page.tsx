@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
@@ -9,11 +9,52 @@ export default function ValidadorPage() {
   const [usuarioInput, setUsuarioInput] = useState('');
   const [claveInput, setClaveInput] = useState('');
   const [codigoManual, setCodigoManual] = useState('');
-  const [mensaje, setMensaje] = useState<{ tipo: 'exito' | 'error' | 'info'; texto: string } | null>(null);
+  
+  const [procesando, setProcesando] = useState(false);
+  const [resultado, setResultado] = useState<{
+    tipo: 'exito' | 'error';
+    titulo: string;
+    subtitulo: string;
+    detalle?: string;
+  } | null>(null);
+
+  const procesandoRef = useRef(false);
+
+  // Función para reproducir pitidos usando Web Audio API
+  const reproducirSonido = (tipo: 'exito' | 'error') => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      if (tipo === 'exito') {
+        // Tono agudo y limpio (Verde)
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime); // Nota A5
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.25);
+      } else {
+        // Tono grave doble/alerta (Rojo)
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, ctx.currentTime); // Nota A3
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.4);
+      }
+    } catch (e) {
+      console.log('Error reproduciendo audio:', e);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMensaje(null);
+    setResultado(null);
 
     const { data, error } = await supabase
       .from('validadores')
@@ -23,18 +64,24 @@ export default function ValidadorPage() {
       .maybeSingle();
 
     if (error || !data) {
-      setMensaje({ tipo: 'error', texto: 'Usuario o contraseña incorrectos.' });
+      setResultado({
+        tipo: 'error',
+        titulo: 'ACCESO DENEGADO',
+        subtitulo: 'Usuario o contraseña incorrectos.',
+      });
+      reproducirSonido('error');
       return;
     }
 
     setValidadorSesion(data);
-    setMensaje({ tipo: 'exito', texto: `¡Bienvenido ${data.nombre_puerta}!` });
+    setResultado(null);
   };
 
   const procesarEntrada = async (codigo: string) => {
-    if (!validadorSesion) return;
+    if (procesandoRef.current || !validadorSesion) return;
 
-    setMensaje({ tipo: 'info', texto: 'Verificando ticket...' });
+    procesandoRef.current = true;
+    setProcesando(true);
 
     const { data: ticket, error } = await supabase
       .from('tickets')
@@ -44,29 +91,60 @@ export default function ValidadorPage() {
       .maybeSingle();
 
     if (error || !ticket) {
-      setMensaje({ tipo: 'error', texto: '❌ TICKET INVÁLIDO O NO EXISTE.' });
-      return;
-    }
+      reproducirSonido('error');
+      setResultado({
+        tipo: 'error',
+        titulo: '⛔ TICKET INVÁLIDO',
+        subtitulo: 'El código QR no pertenece a este evento o no existe.',
+      });
+    } else if (ticket.ingresado) {
+      reproducirSonido('error');
+      const horaIngreso = ticket.fecha_ingreso 
+        ? new Date(ticket.fecha_ingreso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : 'Hora desconocida';
 
-    if (ticket.ingresado) {
-      setMensaje({ tipo: 'error', texto: `⚠️ TICKET YA USADO por ${ticket.nombre_asistente}` });
-      return;
-    }
-
-    const { error: updateErr } = await supabase
-      .from('tickets')
-      .update({
-        ingresado: true,
-        fecha_ingreso: new Date().toISOString()
-      })
-      .eq('id', ticket.id);
-
-    if (!updateErr) {
-      setMensaje({ tipo: 'exito', texto: `✅ INGRESO PERMITIDO: ${ticket.nombre_asistente}` });
-      setCodigoManual('');
+      setResultado({
+        tipo: 'error',
+        titulo: '⚠️ TICKET YA USADO',
+        subtitulo: `Asistente: ${ticket.nombre_asistente}`,
+        detalle: `Este pase ya ingresó previamente a las ${horaIngreso}.`,
+      });
     } else {
-      setMensaje({ tipo: 'error', texto: 'Error al actualizar ticket.' });
+      // Registrar ingreso
+      const fechaActual = new Date().toISOString();
+      const { error: updateErr } = await supabase
+        .from('tickets')
+        .update({
+          ingresado: true,
+          fecha_ingreso: fechaActual,
+        })
+        .eq('id', ticket.id);
+
+      if (!updateErr) {
+        reproducirSonido('exito');
+        setResultado({
+          tipo: 'exito',
+          titulo: '✅ INGRESO PERMITIDO',
+          subtitulo: ticket.nombre_asistente,
+          detalle: `Pase validado exitosamente en ${validadorSesion.nombre_puerta}.`,
+        });
+        setCodigoManual('');
+      } else {
+        reproducirSonido('error');
+        setResultado({
+          tipo: 'error',
+          titulo: '❌ ERROR DE CONEXIÓN',
+          subtitulo: 'No se pudo actualizar el estado del ticket.',
+        });
+      }
     }
+
+    // Pausa / congelado de 1.5 segundos antes de volver a escanear
+    setTimeout(() => {
+      setResultado(null);
+      setProcesando(false);
+      procesandoRef.current = false;
+    }, 1500);
   };
 
   useEffect(() => {
@@ -124,61 +202,87 @@ export default function ValidadorPage() {
 
             <button
               type="submit"
-              className="w-full bg-emerald-500 text-slate-950 font-bold py-3 rounded-xl text-xs"
+              className="w-full bg-emerald-500 text-slate-950 font-bold py-3 rounded-xl text-xs hover:bg-emerald-400 transition"
             >
               Iniciar Sesión
             </button>
           </form>
 
-          {mensaje && (
-            <div className={`p-3 rounded-xl text-xs font-bold text-center ${
-              mensaje.tipo === 'error' ? 'bg-rose-950 text-rose-300' : 'bg-emerald-950 text-emerald-300'
-            }`}>
-              {mensaje.texto}
+          {resultado && (
+            <div className="p-3 bg-rose-950 text-rose-300 rounded-xl text-xs font-bold text-center border border-rose-800">
+              {resultado.subtitulo}
             </div>
           )}
         </div>
       ) : (
-        <div className="max-w-md w-full space-y-6">
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex justify-between items-center">
+        <div className="max-w-md w-full space-y-4">
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex justify-between items-center shadow-lg">
             <div>
-              <span className="text-[10px] font-bold text-emerald-400 uppercase">{validadorSesion.nombre_puerta}</span>
-              <h2 className="text-sm font-bold">{validadorSesion.eventos?.nombre || 'Evento'}</h2>
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">
+                {validadorSesion.nombre_puerta}
+              </span>
+              <h2 className="text-sm font-bold text-white">{validadorSesion.eventos?.nombre || 'Evento'}</h2>
             </div>
             <button
               onClick={() => setValidadorSesion(null)}
-              className="text-xs bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-400"
+              className="text-xs bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition"
             >
               Cerrar Sesión
             </button>
           </div>
 
-          {mensaje && (
-            <div className={`p-4 rounded-2xl text-xs font-black text-center shadow-lg ${
-              mensaje.tipo === 'error' ? 'bg-rose-500 text-white' : 'bg-emerald-500 text-slate-950'
-            }`}>
-              {mensaje.texto}
+          {/* Banner de resultado congelado (1.5s) */}
+          {resultado && (
+            <div
+              className={`p-5 rounded-2xl text-center shadow-2xl transition-all duration-300 ${
+                resultado.tipo === 'exito'
+                  ? 'bg-emerald-500 text-slate-950 border-2 border-emerald-300'
+                  : 'bg-rose-600 text-white border-2 border-rose-400'
+              }`}
+            >
+              <h3 className="text-base font-black uppercase tracking-wider">{resultado.titulo}</h3>
+              <p className="text-sm font-extrabold mt-1">{resultado.subtitulo}</p>
+              {resultado.detalle && (
+                <p
+                  className={`text-xs mt-2 font-medium ${
+                    resultado.tipo === 'exito' ? 'text-slate-900' : 'text-rose-100'
+                  }`}
+                >
+                  {resultado.detalle}
+                </p>
+              )}
             </div>
           )}
 
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-2">
-            <h3 className="text-xs font-bold text-slate-400 uppercase text-center">Escanear con Cámara</h3>
-            <div id="reader" className="overflow-hidden rounded-xl bg-slate-950 border border-slate-800"></div>
+          {/* Scanner de Cámara */}
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-2 relative overflow-hidden shadow-xl">
+            <h3 className="text-xs font-bold text-slate-400 uppercase text-center">
+              {procesando ? '⏳ Procesando...' : '📷 Escanear con Cámara'}
+            </h3>
+            <div
+              id="reader"
+              className={`overflow-hidden rounded-xl bg-slate-950 border border-slate-800 transition-opacity ${
+                procesando ? 'opacity-30 pointer-events-none' : 'opacity-100'
+              }`}
+            ></div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase">Validación Manual</h3>
+          {/* Opción Manual */}
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-3 shadow-xl">
+            <h3 className="text-xs font-bold text-slate-400 uppercase">Ingreso Manual de Código</h3>
             <div className="flex gap-2">
               <input
                 type="text"
+                disabled={procesando}
                 placeholder="Código (Ej: VPASS-ABC123)"
                 value={codigoManual}
                 onChange={(e) => setCodigoManual(e.target.value.toUpperCase())}
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono"
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono uppercase"
               />
               <button
+                disabled={procesando || !codigoManual.trim()}
                 onClick={() => procesarEntrada(codigoManual)}
-                className="bg-emerald-500 text-slate-950 font-bold px-4 rounded-xl text-xs"
+                className="bg-emerald-500 text-slate-950 font-bold px-4 rounded-xl text-xs hover:bg-emerald-400 disabled:opacity-50 transition"
               >
                 Validar
               </button>
