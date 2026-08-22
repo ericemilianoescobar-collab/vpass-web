@@ -29,17 +29,14 @@ export default function AdministrarEvento() {
   const [posY, setPosY] = useState<number>(80);
   const [tamanoQr, setTamanoQr] = useState<number>(100);
 
-  // Campos para validador
   const [nombrePuerta, setNombrePuerta] = useState('');
   const [usuarioVal, setUsuarioVal] = useState('');
   const [claveVal, setClaveVal] = useState('');
 
-  // Campos para invitado
   const [nombreInvitado, setNombreInvitado] = useState('');
   const [contactoInvitado, setContactoInvitado] = useState('');
 
   const [invitadoSeleccionado, setInvitadoSeleccionado] = useState<any>(null);
-  const flyerContainerRef = useRef<HTMLDivElement>(null);
 
   const cargarDatos = async () => {
     if (!eventoId) return;
@@ -60,7 +57,6 @@ export default function AdministrarEvento() {
         flyer_url: dataEvento.flyer_url || '',
       });
 
-      // Carga posición predeterminada desde el almacenamiento local o base de datos
       const configGuardada = localStorage.getItem(`vpass_pos_${eventoId}`);
       if (configGuardada) {
         const { x, y, size } = JSON.parse(configGuardada);
@@ -95,7 +91,6 @@ export default function AdministrarEvento() {
     cargarDatos();
   }, [eventoId]);
 
-  // Carga directa de archivo de imagen desde computadora/móvil
   const handleCargarImagen = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -110,14 +105,14 @@ export default function AdministrarEvento() {
 
   const handleGuardarEvento = async (e: React.FormEvent) => {
     e.preventDefault();
+    const { lugar, ...datosEvento } = formEvento;
     const payload = {
-      ...formEvento,
+      ...datosEvento,
       pos_x: posX,
       pos_y: posY,
       tamano_qr: tamanoQr,
     };
 
-    // Guardar también en localStorage como predeterminado
     localStorage.setItem(`vpass_pos_${eventoId}`, JSON.stringify({ x: posX, y: posY, size: tamanoQr }));
 
     const { error } = await supabase
@@ -126,10 +121,10 @@ export default function AdministrarEvento() {
       .eq('id', eventoId);
 
     if (!error) {
-      alert('¡Configuración de evento y posición guardada correctamente!');
+      alert('¡Configuración guardada correctamente!');
       cargarDatos();
     } else {
-      alert('Error: ' + error.message);
+      alert('Error al guardar: ' + error.message);
     }
   };
 
@@ -152,7 +147,7 @@ export default function AdministrarEvento() {
       setClaveVal('');
       cargarDatos();
     } else {
-      alert('Error al crear validador: ' + error.message);
+      alert('Error: ' + error.message);
     }
   };
 
@@ -183,7 +178,7 @@ export default function AdministrarEvento() {
       setContactoInvitado('');
       cargarDatos();
     } else {
-      alert('Error al crear invitado: ' + error.message);
+      alert('Error: ' + error.message);
     }
   };
 
@@ -193,29 +188,95 @@ export default function AdministrarEvento() {
     cargarDatos();
   };
 
-  // Exportar a PDF limpio sin bordes ni marcos extra
-  const descargarPDFInvitado = async (invitado: any) => {
-    const el = document.getElementById(`ticket-preview-${invitado.id}`);
-    if (!el) {
-      alert('Generando vista previa...');
-      return;
-    }
+  // Función para capturar el elemento visual
+  const capturarTicketCanvas = async (invitadoId: any) => {
+    const el = document.getElementById(`ticket-preview-${invitadoId}`);
+    if (!el) return null;
 
-    const canvas = await html2canvas(el, {
-      scale: 3,
+    return await html2canvas(el, {
+      scale: 2,
       useCORS: true,
-      backgroundColor: null,
+      allowTaint: true,
+      backgroundColor: '#000000',
     });
+  };
 
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({
-      orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-      unit: 'px',
-      format: [canvas.width, canvas.height],
-    });
+  // Descargar PDF
+  const descargarPDFInvitado = async (invitado: any) => {
+    try {
+      const canvas = await capturarTicketCanvas(invitado.id);
+      if (!canvas) return alert('No se pudo procesar la imagen.');
 
-    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-    pdf.save(`Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.pdf`);
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height],
+      });
+
+      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+      pdf.save(`Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.pdf`);
+    } catch (err: any) {
+      alert('Error al generar PDF: ' + err.message);
+    }
+  };
+
+  // Descargar Imagen PNG
+  const descargarImagenInvitado = async (invitado: any) => {
+    try {
+      const canvas = await capturarTicketCanvas(invitado.id);
+      if (!canvas) return alert('No se pudo procesar la imagen.');
+
+      const link = document.createElement('a');
+      link.download = `Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err: any) {
+      alert('Error al generar imagen: ' + err.message);
+    }
+  };
+
+  // Enviar por WhatsApp
+  const enviarPorWhatsApp = (invitado: any) => {
+    const mensaje = encodeURIComponent(
+      `Hola ${invitado.nombre_asistente}, aquí tienes tu pase para *${evento?.nombre || 'el evento'}*.\n\n` +
+        `🎟️ *Código de entrada:* ${invitado.codigo_qr}\n` +
+        `📅 *Fecha:* ${formEvento.fecha || 'Por confirmar'} ${formEvento.hora || ''}\n` +
+        `📍 *Lugar:* ${formEvento.lugar || 'Por confirmar'}\n\n` +
+        `¡Muestra este código en la entrada!`
+    );
+
+    const telefonoLimpio = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : '';
+    const url = telefonoLimpio
+      ? `https://api.whatsapp.com/send?phone=${telefonoLimpio}&text=${mensaje}`
+      : `https://api.whatsapp.com/send?text=${mensaje}`;
+
+    window.open(url, '_blank');
+  };
+
+  // Compartir Nativo (PDF o Imagen)
+  const compartirTicket = async (invitado: any) => {
+    try {
+      const canvas = await capturarTicketCanvas(invitado.id);
+      if (!canvas) return alert('No se pudo procesar la imagen.');
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `Pase_${invitado.nombre_asistente}.png`, { type: 'image/png' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Pase de ${invitado.nombre_asistente}`,
+            text: `Pase de acceso para ${evento?.nombre || 'el evento'}`,
+            files: [file],
+          });
+        } else {
+          enviarPorWhatsApp(invitado);
+        }
+      });
+    } catch (err: any) {
+      enviarPorWhatsApp(invitado);
+    }
   };
 
   if (cargando) {
@@ -360,10 +421,7 @@ export default function AdministrarEvento() {
                     </div>
 
                     <div className="lg:col-span-2 flex justify-center">
-                      <div
-                        ref={flyerContainerRef}
-                        className="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl aspect-[1/1.414] w-full max-w-xs flex items-center justify-center"
-                      >
+                      <div className="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl aspect-[1/1.414] w-full max-w-xs flex items-center justify-center">
                         {formEvento.flyer_url ? (
                           <img src={formEvento.flyer_url} alt="Flyer" className="w-full h-full object-cover" />
                         ) : (
@@ -412,7 +470,7 @@ export default function AdministrarEvento() {
                 />
                 <input
                   type="text"
-                  placeholder="Teléfono / Email (Opcional)"
+                  placeholder="Teléfono (Ej: +51987654321)"
                   value={contactoInvitado}
                   onChange={(e) => setContactoInvitado(e.target.value)}
                   className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
@@ -428,7 +486,7 @@ export default function AdministrarEvento() {
               <div className="space-y-3">
                 <h3 className="text-[11px] font-bold text-slate-400 uppercase">Invitados ({invitados.length})</h3>
                 {invitados.map((inv) => (
-                  <div key={inv.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-950 border border-slate-800 p-4 rounded-xl gap-3 text-xs">
+                  <div key={inv.id} className="flex flex-col lg:flex-row items-start lg:items-center justify-between bg-slate-950 border border-slate-800 p-4 rounded-xl gap-3 text-xs">
                     <div>
                       <span className="font-bold text-white text-sm block">{inv.nombre_asistente}</span>
                       <span className="text-slate-400 text-[10px]">
@@ -437,39 +495,62 @@ export default function AdministrarEvento() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex flex-wrap items-center gap-1.5 w-full lg:w-auto">
                       <button
                         onClick={() => descargarPDFInvitado(inv)}
-                        className="flex-1 sm:flex-none bg-emerald-950 text-emerald-400 border border-emerald-800/50 px-3 py-1.5 rounded-lg font-bold text-[11px]"
+                        className="bg-emerald-950 text-emerald-400 border border-emerald-800/50 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
                       >
-                        📄 Descargar PDF
+                        📄 PDF
+                      </button>
+                      <button
+                        onClick={() => descargarImagenInvitado(inv)}
+                        className="bg-sky-950 text-sky-400 border border-sky-800/50 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
+                      >
+                        🖼️ Imagen
+                      </button>
+                      <button
+                        onClick={() => enviarPorWhatsApp(inv)}
+                        className="bg-green-950 text-green-400 border border-green-800/50 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
+                      >
+                        💬 WhatsApp
+                      </button>
+                      <button
+                        onClick={() => compartirTicket(inv)}
+                        className="bg-purple-950 text-purple-400 border border-purple-800/50 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
+                      >
+                        📲 Compartir
                       </button>
                       <button
                         onClick={() => setInvitadoSeleccionado(inv)}
-                        className="flex-1 sm:flex-none bg-slate-900 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-[11px]"
+                        className="bg-slate-900 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
                       >
-                        👁️ Ver QR
+                        👁️ Ver
                       </button>
                       <button
                         onClick={() => handleEliminarInvitado(inv.id)}
-                        className="bg-rose-950/40 text-rose-400 border border-rose-800/40 px-3 py-1.5 rounded-lg font-bold text-[11px]"
+                        className="bg-rose-950/40 text-rose-400 border border-rose-800/40 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
                       >
-                        🗑️ Eliminar
+                        🗑️
                       </button>
                     </div>
 
-                    {/* Div Oculto Limpio para renderizado PDF */}
-                    <div className="hidden">
+                    {/* Div Oculto para Generar Ticket en alta resolución */}
+                    <div className="fixed top-[-9999px] left-[-9999px] pointer-events-none">
                       <div
                         id={`ticket-preview-${inv.id}`}
-                        className="relative overflow-hidden inline-block"
+                        className="relative overflow-hidden bg-slate-950"
                         style={{ width: '600px', height: '848px' }}
                       >
                         {formEvento.flyer_url && (
-                          <img src={formEvento.flyer_url} alt="Flyer PDF" className="w-full h-full object-cover" />
+                          <img
+                            src={formEvento.flyer_url}
+                            alt="Flyer PDF"
+                            className="w-full h-full object-cover"
+                            crossOrigin="anonymous"
+                          />
                         )}
                         <div
-                          className="absolute transform -translate-x-1/2 -translate-y-1/2 bg-white p-3 rounded-2xl text-center shadow-xl"
+                          className="absolute transform -translate-x-1/2 -translate-y-1/2 bg-white p-3 rounded-2xl text-center shadow-2xl"
                           style={{
                             left: `${posX}%`,
                             top: `${posY}%`,
@@ -477,11 +558,12 @@ export default function AdministrarEvento() {
                           }}
                         >
                           <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${inv.codigo_qr}`}
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${inv.codigo_qr}`}
                             alt="QR PDF"
                             className="w-full h-auto"
+                            crossOrigin="anonymous"
                           />
-                          <p className="text-[10px] font-black text-slate-900 mt-1">{inv.nombre_asistente}</p>
+                          <p className="text-[11px] font-black text-slate-900 mt-1">{inv.nombre_asistente}</p>
                         </div>
                       </div>
                     </div>
@@ -564,16 +646,28 @@ export default function AdministrarEvento() {
                 className="w-48 h-48 mx-auto"
               />
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => descargarPDFInvitado(invitadoSeleccionado)}
-                className="flex-1 bg-emerald-500 text-slate-950 font-bold py-2 rounded-xl text-xs"
+                className="bg-emerald-500 text-slate-950 font-bold py-2 rounded-xl text-xs"
               >
-                📄 Descargar PDF
+                📄 PDF
+              </button>
+              <button
+                onClick={() => descargarImagenInvitado(invitadoSeleccionado)}
+                className="bg-sky-500 text-slate-950 font-bold py-2 rounded-xl text-xs"
+              >
+                🖼️ Imagen
+              </button>
+              <button
+                onClick={() => enviarPorWhatsApp(invitadoSeleccionado)}
+                className="bg-green-500 text-slate-950 font-bold py-2 rounded-xl text-xs"
+              >
+                💬 WhatsApp
               </button>
               <button
                 onClick={() => setInvitadoSeleccionado(null)}
-                className="bg-slate-800 text-slate-300 font-bold px-4 py-2 rounded-xl text-xs"
+                className="bg-slate-800 text-slate-300 font-bold py-2 rounded-xl text-xs"
               >
                 Cerrar
               </button>
