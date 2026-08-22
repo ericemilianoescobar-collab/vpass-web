@@ -151,12 +151,12 @@ export default function ValidadorPage() {
       }
     }
 
-    // Pausa / congelado de 1.5 segundos antes de permitir un nuevo escaneo
+    // Pausa / congelado de 2.5 segundos para revisión clara
     setTimeout(() => {
       setResultado(null);
       setProcesando(false);
       procesandoRef.current = false;
-    }, 1500);
+    }, 2500);
   };
 
   useEffect(() => {
@@ -243,7 +243,7 @@ export default function ValidadorPage() {
             </button>
           </div>
 
-          {/* Banner de resultado congelado (1.5s) */}
+          {/* Banner de resultado congelado */}
           {resultado && (
             <div
               className={`p-5 rounded-2xl text-center shadow-2xl transition-all duration-300 ${

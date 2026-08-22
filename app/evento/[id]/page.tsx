@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 export default function AdministrarEvento() {
   const params = useParams();
@@ -27,7 +29,7 @@ export default function AdministrarEvento() {
   const [posY, setPosY] = useState<number>(80);
   const [tamanoQr, setTamanoQr] = useState<number>(100);
 
-  // Campos para validador (coincide con la columna 'clave' de tu Supabase)
+  // Campos para validador
   const [nombrePuerta, setNombrePuerta] = useState('');
   const [usuarioVal, setUsuarioVal] = useState('');
   const [claveVal, setClaveVal] = useState('');
@@ -37,6 +39,7 @@ export default function AdministrarEvento() {
   const [contactoInvitado, setContactoInvitado] = useState('');
 
   const [invitadoSeleccionado, setInvitadoSeleccionado] = useState<any>(null);
+  const flyerContainerRef = useRef<HTMLDivElement>(null);
 
   const cargarDatos = async () => {
     if (!eventoId) return;
@@ -57,9 +60,18 @@ export default function AdministrarEvento() {
         flyer_url: dataEvento.flyer_url || '',
       });
 
-      if (dataEvento.pos_x) setPosX(Number(dataEvento.pos_x));
-      if (dataEvento.pos_y) setPosY(Number(dataEvento.pos_y));
-      if (dataEvento.tamano_qr) setTamanoQr(Number(dataEvento.tamano_qr));
+      // Carga posición predeterminada desde el almacenamiento local o base de datos
+      const configGuardada = localStorage.getItem(`vpass_pos_${eventoId}`);
+      if (configGuardada) {
+        const { x, y, size } = JSON.parse(configGuardada);
+        setPosX(x);
+        setPosY(y);
+        setTamanoQr(size);
+      } else {
+        if (dataEvento.pos_x) setPosX(Number(dataEvento.pos_x));
+        if (dataEvento.pos_y) setPosY(Number(dataEvento.pos_y));
+        if (dataEvento.tamano_qr) setTamanoQr(Number(dataEvento.tamano_qr));
+      }
 
       const { data: dataValidadores } = await supabase
         .from('validadores')
@@ -83,6 +95,19 @@ export default function AdministrarEvento() {
     cargarDatos();
   }, [eventoId]);
 
+  // Carga directa de archivo de imagen desde computadora/móvil
+  const handleCargarImagen = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const url = event.target?.result as string;
+        setFormEvento((prev) => ({ ...prev, flyer_url: url }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleGuardarEvento = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
@@ -92,13 +117,16 @@ export default function AdministrarEvento() {
       tamano_qr: tamanoQr,
     };
 
+    // Guardar también en localStorage como predeterminado
+    localStorage.setItem(`vpass_pos_${eventoId}`, JSON.stringify({ x: posX, y: posY, size: tamanoQr }));
+
     const { error } = await supabase
       .from('eventos')
       .update(payload)
       .eq('id', eventoId);
 
     if (!error) {
-      alert('¡Evento guardado correctamente!');
+      alert('¡Configuración de evento y posición guardada correctamente!');
       cargarDatos();
     } else {
       alert('Error: ' + error.message);
@@ -109,7 +137,6 @@ export default function AdministrarEvento() {
     e.preventDefault();
     if (!usuarioVal.trim() || !claveVal.trim()) return;
 
-    // Guarda en la columna 'clave' de tu DB
     const { error } = await supabase.from('validadores').insert([
       {
         evento_id: eventoId,
@@ -166,47 +193,29 @@ export default function AdministrarEvento() {
     cargarDatos();
   };
 
-  const descargarQrInvitado = (invitado: any) => {
-    if (!evento?.flyer_url) {
-      alert('Primero debes guardar la URL de un flyer.');
+  // Exportar a PDF limpio sin bordes ni marcos extra
+  const descargarPDFInvitado = async (invitado: any) => {
+    const el = document.getElementById(`ticket-preview-${invitado.id}`);
+    if (!el) {
+      alert('Generando vista previa...');
       return;
     }
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const imgFlyer = new Image();
-    imgFlyer.crossOrigin = 'anonymous';
-    imgFlyer.src = evento.flyer_url;
+    const canvas = await html2canvas(el, {
+      scale: 3,
+      useCORS: true,
+      backgroundColor: null,
+    });
 
-    imgFlyer.onload = () => {
-      canvas.width = imgFlyer.width;
-      canvas.height = imgFlyer.height;
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({
+      orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [canvas.width, canvas.height],
+    });
 
-      if (ctx) {
-        ctx.drawImage(imgFlyer, 0, 0);
-
-        const imgQr = new Image();
-        imgQr.crossOrigin = 'anonymous';
-        imgQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=${tamanoQr * 2}x${tamanoQr * 2}&data=${invitado.codigo_qr}`;
-
-        imgQr.onload = () => {
-          const qrX = (canvas.width * posX) / 100 - tamanoQr / 2;
-          const qrY = (canvas.height * posY) / 100 - tamanoQr / 2;
-
-          ctx.fillStyle = '#FFFFFF';
-          ctx.beginPath();
-          ctx.roundRect(qrX - 10, qrY - 10, tamanoQr + 20, tamanoQr + 20, 16);
-          ctx.fill();
-
-          ctx.drawImage(imgQr, qrX, qrY, tamanoQr, tamanoQr);
-
-          const link = document.createElement('a');
-          link.download = `Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.png`;
-          link.href = canvas.toDataURL('image/png');
-          link.click();
-        };
-      }
-    };
+    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+    pdf.save(`Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.pdf`);
   };
 
   if (cargando) {
@@ -252,7 +261,7 @@ export default function AdministrarEvento() {
               pestanaPrincipal === 'validadores' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'
             }`}
           >
-            🔑 Validadores / Personal de Puerta ({validadores.length})
+            🔑 Validadores / Personal ({validadores.length})
           </button>
         </div>
 
@@ -302,17 +311,17 @@ export default function AdministrarEvento() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">URL del Flyer</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cargar Imagen / Flyer</label>
                   <input
-                    type="text"
-                    value={formEvento.flyer_url}
-                    onChange={(e) => setFormEvento({ ...formEvento, flyer_url: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleCargarImagen}
+                    className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-500 file:text-slate-950 hover:file:bg-emerald-400 transition"
                   />
                 </div>
 
                 <div className="pt-4 border-t border-slate-800">
-                  <h3 className="text-xs font-bold text-slate-300 uppercase mb-3">2. Posición del QR en Flyer</h3>
+                  <h3 className="text-xs font-bold text-slate-300 uppercase mb-3">2. Posición Predeterminada del QR</h3>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
                     <div className="space-y-4">
                       <div>
@@ -351,11 +360,14 @@ export default function AdministrarEvento() {
                     </div>
 
                     <div className="lg:col-span-2 flex justify-center">
-                      <div className="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl aspect-[1/1.414] w-full max-w-xs flex items-center justify-center">
+                      <div
+                        ref={flyerContainerRef}
+                        className="relative bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl aspect-[1/1.414] w-full max-w-xs flex items-center justify-center"
+                      >
                         {formEvento.flyer_url ? (
                           <img src={formEvento.flyer_url} alt="Flyer" className="w-full h-full object-cover" />
                         ) : (
-                          <p className="text-xs text-slate-500 text-center p-4">Ingresa la URL del flyer arriba</p>
+                          <p className="text-xs text-slate-500 text-center p-4">Selecciona una imagen de flyer arriba</p>
                         )}
                         <div
                           className="absolute transform -translate-x-1/2 -translate-y-1/2 bg-white p-2 rounded-2xl shadow-2xl"
@@ -381,7 +393,7 @@ export default function AdministrarEvento() {
                   type="submit"
                   className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl text-xs transition"
                 >
-                  💾 Guardar Cambios
+                  💾 Guardar Evento y Posición Predeterminada
                 </button>
               </form>
             </div>
@@ -413,7 +425,7 @@ export default function AdministrarEvento() {
                 </button>
               </form>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <h3 className="text-[11px] font-bold text-slate-400 uppercase">Invitados ({invitados.length})</h3>
                 {invitados.map((inv) => (
                   <div key={inv.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-950 border border-slate-800 p-4 rounded-xl gap-3 text-xs">
@@ -427,10 +439,10 @@ export default function AdministrarEvento() {
 
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                       <button
-                        onClick={() => descargarQrInvitado(inv)}
+                        onClick={() => descargarPDFInvitado(inv)}
                         className="flex-1 sm:flex-none bg-emerald-950 text-emerald-400 border border-emerald-800/50 px-3 py-1.5 rounded-lg font-bold text-[11px]"
                       >
-                        📥 Descargar Pase PNG
+                        📄 Descargar PDF
                       </button>
                       <button
                         onClick={() => setInvitadoSeleccionado(inv)}
@@ -444,6 +456,34 @@ export default function AdministrarEvento() {
                       >
                         🗑️ Eliminar
                       </button>
+                    </div>
+
+                    {/* Div Oculto Limpio para renderizado PDF */}
+                    <div className="hidden">
+                      <div
+                        id={`ticket-preview-${inv.id}`}
+                        className="relative overflow-hidden inline-block"
+                        style={{ width: '600px', height: '848px' }}
+                      >
+                        {formEvento.flyer_url && (
+                          <img src={formEvento.flyer_url} alt="Flyer PDF" className="w-full h-full object-cover" />
+                        )}
+                        <div
+                          className="absolute transform -translate-x-1/2 -translate-y-1/2 bg-white p-3 rounded-2xl text-center shadow-xl"
+                          style={{
+                            left: `${posX}%`,
+                            top: `${posY}%`,
+                            width: `${tamanoQr * 1.5}px`,
+                          }}
+                        >
+                          <img
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${inv.codigo_qr}`}
+                            alt="QR PDF"
+                            className="w-full h-auto"
+                          />
+                          <p className="text-[10px] font-black text-slate-900 mt-1">{inv.nombre_asistente}</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -526,10 +566,10 @@ export default function AdministrarEvento() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => descargarQrInvitado(invitadoSeleccionado)}
+                onClick={() => descargarPDFInvitado(invitadoSeleccionado)}
                 className="flex-1 bg-emerald-500 text-slate-950 font-bold py-2 rounded-xl text-xs"
               >
-                📥 Descargar PNG
+                📄 Descargar PDF
               </button>
               <button
                 onClick={() => setInvitadoSeleccionado(null)}
