@@ -277,31 +277,56 @@ export default function AdministrarEvento() {
     link.click();
   };
 
-  // Enviar por WhatsApp + Descarga Automática de PDF
+  // Enviar por WhatsApp con Compartir Nativo (Adjunta el PDF directamente en móviles)
   const enviarPorWhatsApp = async (invitado: any) => {
-    // 1. Descargar el PDF primero
-    await descargarPDFInvitado(invitado);
+    try {
+      const canvas = await generarCanvasTicket(invitado);
+      if (!canvas) return alert('No se pudo generar la entrada.');
 
-    // 2. Preparar el mensaje
-    const mensaje = encodeURIComponent(
-      `Hola ${invitado.nombre_asistente}, aquí tienes tu pase para *${evento?.nombre || 'el evento'}*.\n\n` +
+      // 1. Convertir el Canvas a PDF
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height],
+      });
+      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+      const pdfBlob = pdf.output('blob');
+      const nombreArchivo = `Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.pdf`;
+      const file = new File([pdfBlob], nombreArchivo, { type: 'application/pdf' });
+
+      // 2. Texto del mensaje
+      const textoMensaje =
+        `Hola ${invitado.nombre_asistente}, aquí tienes tu pase para *${evento?.nombre || 'el evento'}*.\n\n` +
         `🎟️ *Código de entrada:* ${invitado.codigo_qr}\n` +
         `📅 *Fecha:* ${formEvento.fecha || 'Por confirmar'} ${formEvento.hora || ''}\n` +
         `📍 *Lugar:* ${formEvento.lugar || 'Por confirmar'}\n\n` +
-        `📌 *Adjunto tu PDF descargado para presentar en puerta.*`
-    );
+        `Presenta este pase PDF en el ingreso.`;
 
-    let url = '';
-    const numeroLimpio = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : '';
+      // 3. Evaluar si el navegador del celular soporta compartir archivos directamente
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Pase de Entrada - ${invitado.nombre_asistente}`,
+          text: textoMensaje,
+        });
+      } else {
+        // En caso de estar en una Laptop/PC de escritorio, abre WhatsApp Web con el texto predefinido
+        const numeroLimpio = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : '';
+        const mensajeUrl = encodeURIComponent(textoMensaje);
+        let url = numeroLimpio
+          ? `https://api.whatsapp.com/send?phone=${numeroLimpio}&text=${mensajeUrl}`
+          : `https://api.whatsapp.com/send?text=${mensajeUrl}`;
 
-    if (numeroLimpio) {
-      url = `https://api.whatsapp.com/send?phone=${numeroLimpio}&text=${mensaje}`;
-    } else {
-      url = `https://api.whatsapp.com/send?text=${mensaje}`;
+        // Descargamos el archivo en PC para que lo adjunte manualmente si desea
+        pdf.save(nombreArchivo);
+        window.open(url, '_blank');
+      }
+    } catch (error) {
+      console.error('Error al compartir:', error);
+      alert('Ocurrió un detalle al intentar compartir. Se procederá con la descarga estándar.');
+      descargarPDFInvitado(invitado);
     }
-
-    // 3. Abrir WhatsApp
-    window.open(url, '_blank');
   };
 
   if (cargando) {
