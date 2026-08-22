@@ -5,9 +5,6 @@ import { supabase } from '@/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
 import jsPDF from 'jspdf';
 
-// ⚠️ CAMBIA ESTE NÚMERO POR TU NÚMERO DE SOPORTE TÉCNICO CON CÓDIGO DE PAÍS (Ej: 51987654321)
-const NUMERO_SOPORTE_TECNICO = '51987654321';
-
 export default function AdministrarEvento() {
   const params = useParams();
   const router = useRouter();
@@ -300,9 +297,16 @@ export default function AdministrarEvento() {
         `¡Muestra este código en la entrada!`
     );
 
-    // Si tiene número se envía a su chat, si no, se envía al número de Soporte Técnico
-    const numeroDestino = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : NUMERO_SOPORTE_TECNICO;
-    const url = `https://api.whatsapp.com/send?phone=${numeroDestino}&text=${mensaje}`;
+    let url = '';
+    const numeroLimpio = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : '';
+
+    if (numeroLimpio) {
+      // Si registró número, se envía directamente al chat de ese número
+      url = `https://api.whatsapp.com/send?phone=${numeroLimpio}&text=${mensaje}`;
+    } else {
+      // Si no hay número, abre WhatsApp solo con el texto preparado
+      url = `https://api.whatsapp.com/send?text=${mensaje}`;
+    }
 
     window.open(url, '_blank');
   };
