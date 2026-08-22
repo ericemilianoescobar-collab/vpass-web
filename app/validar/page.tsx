@@ -20,8 +20,20 @@ export default function ValidadorPage() {
 
   const procesandoRef = useRef(false);
 
-  // Función para reproducir pitidos usando Web Audio API
-  const reproducirSonido = (tipo: 'exito' | 'error') => {
+  // Reproducir sonido + vibración al escanear
+  const emitirAlerta = (tipo: 'exito' | 'error') => {
+    // 1. VIBRACIÓN
+    if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      if (tipo === 'exito') {
+        // Vibración corta y positiva
+        navigator.vibrate(200);
+      } else {
+        // Patrón de alerta fuerte e intermitente para error/ya usado
+        navigator.vibrate([300, 100, 300, 100, 300]);
+      }
+    }
+
+    // 2. AUDIO (Web Audio API)
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
@@ -35,17 +47,17 @@ export default function ValidadorPage() {
       if (tipo === 'exito') {
         // Tono agudo y limpio (Verde)
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime); // Nota A5
-        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
         osc.start();
         osc.stop(ctx.currentTime + 0.25);
       } else {
-        // Tono grave doble/alerta (Rojo)
+        // Tono grave de alerta / error (Rojo)
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(220, ctx.currentTime); // Nota A3
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        osc.frequency.setValueAtTime(180, ctx.currentTime);
+        gain.gain.setValueAtTime(0.4, ctx.currentTime);
         osc.start();
-        osc.stop(ctx.currentTime + 0.4);
+        osc.stop(ctx.currentTime + 0.45);
       }
     } catch (e) {
       console.log('Error reproduciendo audio:', e);
@@ -69,7 +81,7 @@ export default function ValidadorPage() {
         titulo: 'ACCESO DENEGADO',
         subtitulo: 'Usuario o contraseña incorrectos.',
       });
-      reproducirSonido('error');
+      emitirAlerta('error');
       return;
     }
 
@@ -91,14 +103,14 @@ export default function ValidadorPage() {
       .maybeSingle();
 
     if (error || !ticket) {
-      reproducirSonido('error');
+      emitirAlerta('error');
       setResultado({
         tipo: 'error',
         titulo: '⛔ TICKET INVÁLIDO',
         subtitulo: 'El código QR no pertenece a este evento o no existe.',
       });
     } else if (ticket.ingresado) {
-      reproducirSonido('error');
+      emitirAlerta('error');
       const horaIngreso = ticket.fecha_ingreso 
         ? new Date(ticket.fecha_ingreso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
         : 'Hora desconocida';
@@ -121,7 +133,7 @@ export default function ValidadorPage() {
         .eq('id', ticket.id);
 
       if (!updateErr) {
-        reproducirSonido('exito');
+        emitirAlerta('exito');
         setResultado({
           tipo: 'exito',
           titulo: '✅ INGRESO PERMITIDO',
@@ -130,7 +142,7 @@ export default function ValidadorPage() {
         });
         setCodigoManual('');
       } else {
-        reproducirSonido('error');
+        emitirAlerta('error');
         setResultado({
           tipo: 'error',
           titulo: '❌ ERROR DE CONEXIÓN',
@@ -139,7 +151,7 @@ export default function ValidadorPage() {
       }
     }
 
-    // Pausa / congelado de 1.5 segundos antes de volver a escanear
+    // Pausa / congelado de 1.5 segundos antes de permitir un nuevo escaneo
     setTimeout(() => {
       setResultado(null);
       setProcesando(false);
@@ -237,7 +249,7 @@ export default function ValidadorPage() {
               className={`p-5 rounded-2xl text-center shadow-2xl transition-all duration-300 ${
                 resultado.tipo === 'exito'
                   ? 'bg-emerald-500 text-slate-950 border-2 border-emerald-300'
-                  : 'bg-rose-600 text-white border-2 border-rose-400'
+                  : 'bg-rose-600 text-white border-2 border-rose-400 animate-bounce'
               }`}
             >
               <h3 className="text-base font-black uppercase tracking-wider">{resultado.titulo}</h3>
