@@ -277,33 +277,23 @@ export default function AdministrarEvento() {
     link.click();
   };
 
-  // Enviar directamente a WhatsApp + Descarga en segundo plano
-  const enviarPorWhatsApp = async (invitado: any) => {
-    // 1. Iniciar la descarga del PDF del invitado
-    descargarPDFInvitado(invitado);
-
-    // 2. Formatear el texto de invitacion
+  // Solo abre WhatsApp directamente sin descargar archivos
+  const enviarPorWhatsApp = (invitado: any) => {
     const textoMensaje = encodeURIComponent(
-      `Hola ${invitado.nombre_asistente}, aquí tienes tu pase para *${evento?.nombre || 'el evento'}*.\n\n` +
+      `Hola ${invitado.nombre_asistente}, aquí tienes los datos de tu pase para *${evento?.nombre || 'el evento'}*:\n\n` +
         `🎟️ *Código de entrada:* ${invitado.codigo_qr}\n` +
         `📅 *Fecha:* ${formEvento.fecha || 'Por confirmar'} ${formEvento.hora || ''}\n` +
         `📍 *Lugar:* ${formEvento.lugar || 'Por confirmar'}\n\n` +
-        `📌 *Te acabo de descargar la entrada en PDF, te la adjunto por aquí.*`
+        `Presenta este mensaje o tu pase en la entrada.`
     );
 
-    // 3. Limpiar el número de teléfono
     const numeroLimpio = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : '';
 
-    // 4. Redirección directa a la app de WhatsApp
-    let urlWhatsApp = '';
-    if (numeroLimpio) {
-      urlWhatsApp = `https://wa.me/${numeroLimpio}?text=${textoMensaje}`;
-    } else {
-      urlWhatsApp = `https://wa.me/?text=${textoMensaje}`;
-    }
+    const urlWhatsApp = numeroLimpio
+      ? `https://wa.me/${numeroLimpio}?text=${textoMensaje}`
+      : `https://wa.me/?text=${textoMensaje}`;
 
-    // Abrir la app directamente
-    window.location.href = urlWhatsApp;
+    window.open(urlWhatsApp, '_blank');
   };
 
   if (cargando) {
