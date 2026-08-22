@@ -187,7 +187,6 @@ export default function AdministrarEvento() {
     cargarDatos();
   };
 
-  // Cargar una imagen mediante promesa para dibujar en canvas
   const cargarImagenPromesa = (src: string): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -198,7 +197,6 @@ export default function AdministrarEvento() {
     });
   };
 
-  // Generar lienzo Canvas directo
   const generarCanvasTicket = async (invitado: any): Promise<HTMLCanvasElement | null> => {
     try {
       const canvas = document.createElement('canvas');
@@ -206,25 +204,22 @@ export default function AdministrarEvento() {
       if (!ctx) return null;
 
       const width = 800;
-      const height = 1131; // Formato Vertical
+      const height = 1131;
       canvas.width = width;
       canvas.height = height;
 
-      // Fondo negro base
       ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(0, 0, width, height);
 
-      // Dibujar Flyer si existe
       if (formEvento.flyer_url) {
         try {
           const imgFlyer = await cargarImagenPromesa(formEvento.flyer_url);
           ctx.drawImage(imgFlyer, 0, 0, width, height);
         } catch (e) {
-          console.warn('No se pudo cargar la imagen del flyer para la exportación.');
+          console.warn('No se pudo cargar el flyer.');
         }
       }
 
-      // Dibujar código QR y datos sobre la imagen
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${invitado.codigo_qr}`;
       const imgQr = await cargarImagenPromesa(qrUrl);
 
@@ -232,7 +227,6 @@ export default function AdministrarEvento() {
       const centerXPx = (posX / 100) * width;
       const centerYPx = (posY / 100) * height;
 
-      // Caja Blanca para el QR
       const padding = 20;
       const boxW = qrSizePx + padding * 2;
       const boxH = qrSizePx + padding * 2 + 35;
@@ -244,10 +238,8 @@ export default function AdministrarEvento() {
       ctx.roundRect(boxX, boxY, boxW, boxH, 16);
       ctx.fill();
 
-      // Dibujar QR
       ctx.drawImage(imgQr, centerXPx - qrSizePx / 2, centerYPx - qrSizePx / 2 - 10, qrSizePx, qrSizePx);
 
-      // Texto de Invitado
       ctx.fillStyle = '#000000';
       ctx.font = 'bold 16px sans-serif';
       ctx.textAlign = 'center';
@@ -260,7 +252,6 @@ export default function AdministrarEvento() {
     }
   };
 
-  // Descargar PDF
   const descargarPDFInvitado = async (invitado: any) => {
     const canvas = await generarCanvasTicket(invitado);
     if (!canvas) return alert('No se pudo generar la entrada.');
@@ -276,7 +267,6 @@ export default function AdministrarEvento() {
     pdf.save(`Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.pdf`);
   };
 
-  // Descargar Imagen PNG
   const descargarImagenInvitado = async (invitado: any) => {
     const canvas = await generarCanvasTicket(invitado);
     if (!canvas) return alert('No se pudo generar la entrada.');
@@ -287,27 +277,30 @@ export default function AdministrarEvento() {
     link.click();
   };
 
-  // Enviar por WhatsApp
-  const enviarPorWhatsApp = (invitado: any) => {
+  // Enviar por WhatsApp + Descarga Automática de PDF
+  const enviarPorWhatsApp = async (invitado: any) => {
+    // 1. Descargar el PDF primero
+    await descargarPDFInvitado(invitado);
+
+    // 2. Preparar el mensaje
     const mensaje = encodeURIComponent(
       `Hola ${invitado.nombre_asistente}, aquí tienes tu pase para *${evento?.nombre || 'el evento'}*.\n\n` +
         `🎟️ *Código de entrada:* ${invitado.codigo_qr}\n` +
         `📅 *Fecha:* ${formEvento.fecha || 'Por confirmar'} ${formEvento.hora || ''}\n` +
         `📍 *Lugar:* ${formEvento.lugar || 'Por confirmar'}\n\n` +
-        `¡Muestra este código en la entrada!`
+        `📌 *Adjunto tu PDF descargado para presentar en puerta.*`
     );
 
     let url = '';
     const numeroLimpio = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : '';
 
     if (numeroLimpio) {
-      // Si registró número, se envía directamente al chat de ese número
       url = `https://api.whatsapp.com/send?phone=${numeroLimpio}&text=${mensaje}`;
     } else {
-      // Si no hay número, abre WhatsApp solo con el texto preparado
       url = `https://api.whatsapp.com/send?text=${mensaje}`;
     }
 
+    // 3. Abrir WhatsApp
     window.open(url, '_blank');
   };
 
