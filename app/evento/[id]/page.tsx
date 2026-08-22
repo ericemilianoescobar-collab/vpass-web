@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+
+// ⚠️ CAMBIA ESTE NÚMERO POR TU NÚMERO DE SOPORTE TÉCNICO CON CÓDIGO DE PAÍS (Ej: 51987654321)
+const NUMERO_SOPORTE_TECNICO = '51987654321';
 
 export default function AdministrarEvento() {
   const params = useParams();
@@ -188,52 +190,104 @@ export default function AdministrarEvento() {
     cargarDatos();
   };
 
-  // Función para capturar el elemento visual
-  const capturarTicketCanvas = async (invitadoId: any) => {
-    const el = document.getElementById(`ticket-preview-${invitadoId}`);
-    if (!el) return null;
-
-    return await html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#000000',
+  // Cargar una imagen mediante promesa para dibujar en canvas
+  const cargarImagenPromesa = (src: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = (e) => reject(e);
+      img.src = src;
     });
+  };
+
+  // Generar lienzo Canvas directo
+  const generarCanvasTicket = async (invitado: any): Promise<HTMLCanvasElement | null> => {
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
+      const width = 800;
+      const height = 1131; // Formato Vertical
+      canvas.width = width;
+      canvas.height = height;
+
+      // Fondo negro base
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(0, 0, width, height);
+
+      // Dibujar Flyer si existe
+      if (formEvento.flyer_url) {
+        try {
+          const imgFlyer = await cargarImagenPromesa(formEvento.flyer_url);
+          ctx.drawImage(imgFlyer, 0, 0, width, height);
+        } catch (e) {
+          console.warn('No se pudo cargar la imagen del flyer para la exportación.');
+        }
+      }
+
+      // Dibujar código QR y datos sobre la imagen
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${invitado.codigo_qr}`;
+      const imgQr = await cargarImagenPromesa(qrUrl);
+
+      const qrSizePx = (tamanoQr / 100) * 180;
+      const centerXPx = (posX / 100) * width;
+      const centerYPx = (posY / 100) * height;
+
+      // Caja Blanca para el QR
+      const padding = 20;
+      const boxW = qrSizePx + padding * 2;
+      const boxH = qrSizePx + padding * 2 + 35;
+      const boxX = centerXPx - boxW / 2;
+      const boxY = centerYPx - boxH / 2;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 16);
+      ctx.fill();
+
+      // Dibujar QR
+      ctx.drawImage(imgQr, centerXPx - qrSizePx / 2, centerYPx - qrSizePx / 2 - 10, qrSizePx, qrSizePx);
+
+      // Texto de Invitado
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(invitado.nombre_asistente.toUpperCase(), centerXPx, boxY + boxH - 12);
+
+      return canvas;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
   };
 
   // Descargar PDF
   const descargarPDFInvitado = async (invitado: any) => {
-    try {
-      const canvas = await capturarTicketCanvas(invitado.id);
-      if (!canvas) return alert('No se pudo procesar la imagen.');
+    const canvas = await generarCanvasTicket(invitado);
+    if (!canvas) return alert('No se pudo generar la entrada.');
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [canvas.width, canvas.height],
-      });
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'px',
+      format: [canvas.width, canvas.height],
+    });
 
-      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
-      pdf.save(`Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.pdf`);
-    } catch (err: any) {
-      alert('Error al generar PDF: ' + err.message);
-    }
+    pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+    pdf.save(`Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.pdf`);
   };
 
   // Descargar Imagen PNG
   const descargarImagenInvitado = async (invitado: any) => {
-    try {
-      const canvas = await capturarTicketCanvas(invitado.id);
-      if (!canvas) return alert('No se pudo procesar la imagen.');
+    const canvas = await generarCanvasTicket(invitado);
+    if (!canvas) return alert('No se pudo generar la entrada.');
 
-      const link = document.createElement('a');
-      link.download = `Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch (err: any) {
-      alert('Error al generar imagen: ' + err.message);
-    }
+    const link = document.createElement('a');
+    link.download = `Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
   };
 
   // Enviar por WhatsApp
@@ -246,37 +300,11 @@ export default function AdministrarEvento() {
         `¡Muestra este código en la entrada!`
     );
 
-    const telefonoLimpio = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : '';
-    const url = telefonoLimpio
-      ? `https://api.whatsapp.com/send?phone=${telefonoLimpio}&text=${mensaje}`
-      : `https://api.whatsapp.com/send?text=${mensaje}`;
+    // Si tiene número se envía a su chat, si no, se envía al número de Soporte Técnico
+    const numeroDestino = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : NUMERO_SOPORTE_TECNICO;
+    const url = `https://api.whatsapp.com/send?phone=${numeroDestino}&text=${mensaje}`;
 
     window.open(url, '_blank');
-  };
-
-  // Compartir Nativo (PDF o Imagen)
-  const compartirTicket = async (invitado: any) => {
-    try {
-      const canvas = await capturarTicketCanvas(invitado.id);
-      if (!canvas) return alert('No se pudo procesar la imagen.');
-
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        const file = new File([blob], `Pase_${invitado.nombre_asistente}.png`, { type: 'image/png' });
-
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: `Pase de ${invitado.nombre_asistente}`,
-            text: `Pase de acceso para ${evento?.nombre || 'el evento'}`,
-            files: [file],
-          });
-        } else {
-          enviarPorWhatsApp(invitado);
-        }
-      });
-    } catch (err: any) {
-      enviarPorWhatsApp(invitado);
-    }
   };
 
   if (cargando) {
@@ -470,7 +498,7 @@ export default function AdministrarEvento() {
                 />
                 <input
                   type="text"
-                  placeholder="Teléfono (Ej: +51987654321)"
+                  placeholder="Teléfono (Opcional)"
                   value={contactoInvitado}
                   onChange={(e) => setContactoInvitado(e.target.value)}
                   className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
@@ -498,33 +526,27 @@ export default function AdministrarEvento() {
                     <div className="flex flex-wrap items-center gap-1.5 w-full lg:w-auto">
                       <button
                         onClick={() => descargarPDFInvitado(inv)}
-                        className="bg-emerald-950 text-emerald-400 border border-emerald-800/50 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
+                        className="bg-emerald-950 text-emerald-400 border border-emerald-800/50 px-3 py-1.5 rounded-lg font-bold text-[11px] hover:bg-emerald-900 transition"
                       >
-                        📄 PDF
+                        📄 Descargar PDF
                       </button>
                       <button
                         onClick={() => descargarImagenInvitado(inv)}
-                        className="bg-sky-950 text-sky-400 border border-sky-800/50 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
+                        className="bg-sky-950 text-sky-400 border border-sky-800/50 px-3 py-1.5 rounded-lg font-bold text-[11px] hover:bg-sky-900 transition"
                       >
                         🖼️ Imagen
                       </button>
                       <button
                         onClick={() => enviarPorWhatsApp(inv)}
-                        className="bg-green-950 text-green-400 border border-green-800/50 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
+                        className="bg-green-950 text-green-400 border border-green-800/50 px-3 py-1.5 rounded-lg font-bold text-[11px] hover:bg-green-900 transition"
                       >
                         💬 WhatsApp
                       </button>
                       <button
-                        onClick={() => compartirTicket(inv)}
-                        className="bg-purple-950 text-purple-400 border border-purple-800/50 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
-                      >
-                        📲 Compartir
-                      </button>
-                      <button
                         onClick={() => setInvitadoSeleccionado(inv)}
-                        className="bg-slate-900 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg font-bold text-[11px]"
+                        className="bg-slate-900 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-[11px]"
                       >
-                        👁️ Ver
+                        👁️ Ver QR
                       </button>
                       <button
                         onClick={() => handleEliminarInvitado(inv.id)}
@@ -532,40 +554,6 @@ export default function AdministrarEvento() {
                       >
                         🗑️
                       </button>
-                    </div>
-
-                    {/* Div Oculto para Generar Ticket en alta resolución */}
-                    <div className="fixed top-[-9999px] left-[-9999px] pointer-events-none">
-                      <div
-                        id={`ticket-preview-${inv.id}`}
-                        className="relative overflow-hidden bg-slate-950"
-                        style={{ width: '600px', height: '848px' }}
-                      >
-                        {formEvento.flyer_url && (
-                          <img
-                            src={formEvento.flyer_url}
-                            alt="Flyer PDF"
-                            className="w-full h-full object-cover"
-                            crossOrigin="anonymous"
-                          />
-                        )}
-                        <div
-                          className="absolute transform -translate-x-1/2 -translate-y-1/2 bg-white p-3 rounded-2xl text-center shadow-2xl"
-                          style={{
-                            left: `${posX}%`,
-                            top: `${posY}%`,
-                            width: `${tamanoQr * 1.5}px`,
-                          }}
-                        >
-                          <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${inv.codigo_qr}`}
-                            alt="QR PDF"
-                            className="w-full h-auto"
-                            crossOrigin="anonymous"
-                          />
-                          <p className="text-[11px] font-black text-slate-900 mt-1">{inv.nombre_asistente}</p>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 ))}
