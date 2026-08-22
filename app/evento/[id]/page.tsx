@@ -277,56 +277,33 @@ export default function AdministrarEvento() {
     link.click();
   };
 
-  // Enviar por WhatsApp con Compartir Nativo (Adjunta el PDF directamente en móviles)
+  // Enviar directamente a WhatsApp + Descarga en segundo plano
   const enviarPorWhatsApp = async (invitado: any) => {
-    try {
-      const canvas = await generarCanvasTicket(invitado);
-      if (!canvas) return alert('No se pudo generar la entrada.');
+    // 1. Iniciar la descarga del PDF del invitado
+    descargarPDFInvitado(invitado);
 
-      // 1. Convertir el Canvas a PDF
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'px',
-        format: [canvas.width, canvas.height],
-      });
-      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
-      const pdfBlob = pdf.output('blob');
-      const nombreArchivo = `Pase-${invitado.nombre_asistente.replace(/\s+/g, '_')}.pdf`;
-      const file = new File([pdfBlob], nombreArchivo, { type: 'application/pdf' });
-
-      // 2. Texto del mensaje
-      const textoMensaje =
-        `Hola ${invitado.nombre_asistente}, aquí tienes tu pase para *${evento?.nombre || 'el evento'}*.\n\n` +
+    // 2. Formatear el texto de invitacion
+    const textoMensaje = encodeURIComponent(
+      `Hola ${invitado.nombre_asistente}, aquí tienes tu pase para *${evento?.nombre || 'el evento'}*.\n\n` +
         `🎟️ *Código de entrada:* ${invitado.codigo_qr}\n` +
         `📅 *Fecha:* ${formEvento.fecha || 'Por confirmar'} ${formEvento.hora || ''}\n` +
         `📍 *Lugar:* ${formEvento.lugar || 'Por confirmar'}\n\n` +
-        `Presenta este pase PDF en el ingreso.`;
+        `📌 *Te acabo de descargar la entrada en PDF, te la adjunto por aquí.*`
+    );
 
-      // 3. Evaluar si el navegador del celular soporta compartir archivos directamente
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `Pase de Entrada - ${invitado.nombre_asistente}`,
-          text: textoMensaje,
-        });
-      } else {
-        // En caso de estar en una Laptop/PC de escritorio, abre WhatsApp Web con el texto predefinido
-        const numeroLimpio = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : '';
-        const mensajeUrl = encodeURIComponent(textoMensaje);
-        let url = numeroLimpio
-          ? `https://api.whatsapp.com/send?phone=${numeroLimpio}&text=${mensajeUrl}`
-          : `https://api.whatsapp.com/send?text=${mensajeUrl}`;
+    // 3. Limpiar el número de teléfono
+    const numeroLimpio = invitado.contacto ? invitado.contacto.replace(/\D/g, '') : '';
 
-        // Descargamos el archivo en PC para que lo adjunte manualmente si desea
-        pdf.save(nombreArchivo);
-        window.open(url, '_blank');
-      }
-    } catch (error) {
-      console.error('Error al compartir:', error);
-      alert('Ocurrió un detalle al intentar compartir. Se procederá con la descarga estándar.');
-      descargarPDFInvitado(invitado);
+    // 4. Redirección directa a la app de WhatsApp
+    let urlWhatsApp = '';
+    if (numeroLimpio) {
+      urlWhatsApp = `https://wa.me/${numeroLimpio}?text=${textoMensaje}`;
+    } else {
+      urlWhatsApp = `https://wa.me/?text=${textoMensaje}`;
     }
+
+    // Abrir la app directamente
+    window.location.href = urlWhatsApp;
   };
 
   if (cargando) {
@@ -520,7 +497,7 @@ export default function AdministrarEvento() {
                 />
                 <input
                   type="text"
-                  placeholder="Teléfono (Opcional)"
+                  placeholder="Teléfono ej: 51999888777 (Opcional)"
                   value={contactoInvitado}
                   onChange={(e) => setContactoInvitado(e.target.value)}
                   className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
