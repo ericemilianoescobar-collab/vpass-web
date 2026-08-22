@@ -7,8 +7,6 @@ import { useParams, useRouter } from 'next/navigation';
 export default function AdministrarEvento() {
   const params = useParams();
   const router = useRouter();
-  
-  // Captura 'id' o 'eventoId' según el nombre de la carpeta
   const eventoId = params?.id || params?.eventoId;
 
   const [evento, setEvento] = useState<any>(null);
@@ -17,7 +15,6 @@ export default function AdministrarEvento() {
   const [cargando, setCargando] = useState(true);
   const [pestanaPrincipal, setPestanaPrincipal] = useState<'evento' | 'validadores'>('evento');
 
-  // Formulario Datos Evento
   const [formEvento, setFormEvento] = useState({
     nombre: '',
     fecha: '',
@@ -26,21 +23,19 @@ export default function AdministrarEvento() {
     flyer_url: '',
   });
 
-  // Ajustes Posición QR
   const [posX, setPosX] = useState<number>(50);
   const [posY, setPosY] = useState<number>(80);
   const [tamanoQr, setTamanoQr] = useState<number>(100);
 
-  // Formulario Validador
+  // Campos para validador (coincide con la columna 'clave' de tu Supabase)
   const [nombrePuerta, setNombrePuerta] = useState('');
   const [usuarioVal, setUsuarioVal] = useState('');
-  const [passwordVal, setPasswordVal] = useState('');
+  const [claveVal, setClaveVal] = useState('');
 
-  // Formulario Invitado
+  // Campos para invitado
   const [nombreInvitado, setNombreInvitado] = useState('');
   const [contactoInvitado, setContactoInvitado] = useState('');
 
-  // Modal QR Invitado
   const [invitadoSeleccionado, setInvitadoSeleccionado] = useState<any>(null);
 
   const cargarDatos = async () => {
@@ -88,7 +83,6 @@ export default function AdministrarEvento() {
     cargarDatos();
   }, [eventoId]);
 
-  // GUARDAR DATOS DEL EVENTO + POSICIÓN QR
   const handleGuardarEvento = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
@@ -104,44 +98,43 @@ export default function AdministrarEvento() {
       .eq('id', eventoId);
 
     if (!error) {
-      alert('¡Información del evento y posición QR guardadas!');
+      alert('¡Evento guardado correctamente!');
       cargarDatos();
     } else {
-      alert('Error al guardar datos: ' + error.message);
+      alert('Error: ' + error.message);
     }
   };
 
-  // AGREGAR VALIDADOR
   const handleCrearValidador = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!usuarioVal.trim() || !passwordVal.trim()) return;
+    if (!usuarioVal.trim() || !claveVal.trim()) return;
 
+    // Guarda en la columna 'clave' de tu DB
     const { error } = await supabase.from('validadores').insert([
       {
         evento_id: eventoId,
         nombre_puerta: nombrePuerta || 'Puerta Principal',
         usuario: usuarioVal.toLowerCase().trim(),
-        password: passwordVal.trim(),
+        clave: claveVal.trim(),
       },
     ]);
 
     if (!error) {
       setNombrePuerta('');
       setUsuarioVal('');
-      setPasswordVal('');
+      setClaveVal('');
       cargarDatos();
     } else {
       alert('Error al crear validador: ' + error.message);
     }
   };
 
-  const handleEliminarValidador = async (id: number) => {
-    if (!confirm('¿Eliminar esta credencial de validador?')) return;
+  const handleEliminarValidador = async (id: any) => {
+    if (!confirm('¿Eliminar validador?')) return;
     await supabase.from('validadores').delete().eq('id', id);
     cargarDatos();
   };
 
-  // AGREGAR INVITADO
   const handleCrearInvitado = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombreInvitado.trim()) return;
@@ -152,7 +145,7 @@ export default function AdministrarEvento() {
       {
         evento_id: eventoId,
         nombre_asistente: nombreInvitado.trim(),
-        contacto: contactoInvitado.trim(),
+        contacto: contactoInvitado.trim() || null,
         codigo_qr: codigoGenerado,
         ingresado: false,
       },
@@ -163,20 +156,19 @@ export default function AdministrarEvento() {
       setContactoInvitado('');
       cargarDatos();
     } else {
-      alert('Error al registrar invitado: ' + error.message);
+      alert('Error al crear invitado: ' + error.message);
     }
   };
 
-  const handleEliminarInvitado = async (id: number) => {
-    if (!confirm('¿Eliminar a este invitado?')) return;
+  const handleEliminarInvitado = async (id: any) => {
+    if (!confirm('¿Eliminar invitado?')) return;
     await supabase.from('tickets').delete().eq('id', id);
     cargarDatos();
   };
 
-  // DESCARGAR FLYER + QR INDIVIDUAL
   const descargarQrInvitado = (invitado: any) => {
     if (!evento?.flyer_url) {
-      alert('Ingresa una URL de flyer válida primero para generar la imagen.');
+      alert('Primero debes guardar la URL de un flyer.');
       return;
     }
 
@@ -201,7 +193,6 @@ export default function AdministrarEvento() {
           const qrX = (canvas.width * posX) / 100 - tamanoQr / 2;
           const qrY = (canvas.height * posY) / 100 - tamanoQr / 2;
 
-          // Fondo blanco redondeado para el QR
           ctx.fillStyle = '#FFFFFF';
           ctx.beginPath();
           ctx.roundRect(qrX - 10, qrY - 10, tamanoQr + 20, tamanoQr + 20, 16);
@@ -219,18 +210,12 @@ export default function AdministrarEvento() {
   };
 
   if (cargando) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-emerald-400 text-xs font-bold">
-        Cargando gestión de evento...
-      </div>
-    );
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-emerald-400 text-xs font-bold">Cargando...</div>;
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans">
       <div className="max-w-5xl mx-auto space-y-6">
-        
-        {/* CABECERA GENERAL */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center">
@@ -252,7 +237,6 @@ export default function AdministrarEvento() {
           </button>
         </div>
 
-        {/* NAVEGACIÓN ÚNICA: 2 PESTAÑAS */}
         <div className="grid grid-cols-2 gap-2 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
           <button
             onClick={() => setPestanaPrincipal('evento')}
@@ -272,35 +256,29 @@ export default function AdministrarEvento() {
           </button>
         </div>
 
-        {/* PESTAÑA 1: TODO LO REFERENTE AL EVENTO EN UNA SOLA VISTA */}
         {pestanaPrincipal === 'evento' && (
           <div className="space-y-8">
-
-            {/* SECCIÓN 1: FORMULARIO EDITAR EVENTO */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-4">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                <h2 className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider">1. Información del Evento</h2>
-              </div>
-
+              <h2 className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider">1. Información del Evento</h2>
               <form onSubmit={handleGuardarEvento} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nombre del Evento</label>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nombre</label>
                     <input
                       type="text"
                       required
                       value={formEvento.nombre}
                       onChange={(e) => setFormEvento({ ...formEvento, nombre: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Lugar / Ubicación</label>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Lugar</label>
                     <input
                       type="text"
                       value={formEvento.lugar}
                       onChange={(e) => setFormEvento({ ...formEvento, lugar: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                     />
                   </div>
                   <div>
@@ -309,7 +287,7 @@ export default function AdministrarEvento() {
                       type="date"
                       value={formEvento.fecha}
                       onChange={(e) => setFormEvento({ ...formEvento, fecha: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                     />
                   </div>
                   <div>
@@ -318,26 +296,23 @@ export default function AdministrarEvento() {
                       type="time"
                       value={formEvento.hora}
                       onChange={(e) => setFormEvento({ ...formEvento, hora: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">URL del Flyer (Imagen)</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">URL del Flyer</label>
                   <input
                     type="text"
-                    placeholder="https://..."
                     value={formEvento.flyer_url}
                     onChange={(e) => setFormEvento({ ...formEvento, flyer_url: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                   />
                 </div>
 
-                {/* SECCIÓN 2: DISEÑADOR QR E INTEGRADO AQUÍ MISMO */}
                 <div className="pt-4 border-t border-slate-800">
-                  <h3 className="text-xs font-bold text-slate-300 uppercase mb-3">2. Ubicación del QR sobre el Flyer</h3>
-                  
+                  <h3 className="text-xs font-bold text-slate-300 uppercase mb-3">2. Posición del QR en Flyer</h3>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
                     <div className="space-y-4">
                       <div>
@@ -351,7 +326,6 @@ export default function AdministrarEvento() {
                           className="w-full accent-emerald-500 cursor-pointer"
                         />
                       </div>
-
                       <div>
                         <label className="block text-[11px] text-slate-400 mb-1">Posición Y ({posY}%)</label>
                         <input
@@ -363,7 +337,6 @@ export default function AdministrarEvento() {
                           className="w-full accent-emerald-500 cursor-pointer"
                         />
                       </div>
-
                       <div>
                         <label className="block text-[11px] text-slate-400 mb-1">Tamaño ({tamanoQr}px)</label>
                         <input
@@ -382,9 +355,8 @@ export default function AdministrarEvento() {
                         {formEvento.flyer_url ? (
                           <img src={formEvento.flyer_url} alt="Flyer" className="w-full h-full object-cover" />
                         ) : (
-                          <p className="text-xs text-slate-500 text-center p-4">Sube la URL de la imagen del flyer arriba</p>
+                          <p className="text-xs text-slate-500 text-center p-4">Ingresa la URL del flyer arriba</p>
                         )}
-
                         <div
                           className="absolute transform -translate-x-1/2 -translate-y-1/2 bg-white p-2 rounded-2xl shadow-2xl"
                           style={{
@@ -407,165 +379,144 @@ export default function AdministrarEvento() {
 
                 <button
                   type="submit"
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl text-xs transition shadow-lg shadow-emerald-500/20"
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl text-xs transition"
                 >
-                  💾 Guardar Todos los Cambios del Evento
+                  💾 Guardar Cambios
                 </button>
               </form>
             </div>
 
-            {/* SECCIÓN 3: GESTIÓN DE INVITADOS EN LA MISMA PÁGINA */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-6">
-              <h2 className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider">3. Registro y Control de Invitados</h2>
+              <h2 className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider">3. Control de Invitados</h2>
 
               <form onSubmit={handleCrearInvitado} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input
                   type="text"
                   required
-                  placeholder="Nombre y Apellido del Invitado"
+                  placeholder="Nombre y Apellido"
                   value={nombreInvitado}
                   onChange={(e) => setNombreInvitado(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                 />
                 <input
                   type="text"
                   placeholder="Teléfono / Email (Opcional)"
                   value={contactoInvitado}
                   onChange={(e) => setContactoInvitado(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                 />
                 <button
                   type="submit"
-                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-xl text-xs transition shadow-lg shadow-emerald-500/20"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-xl text-xs transition"
                 >
                   + Registrar Invitado
                 </button>
               </form>
 
-              {/* LISTA DE INVITADOS CON BOTONES DE DESCARGA INDIVIDUAL */}
-              <div className="space-y-3">
-                <h3 className="text-[11px] font-bold text-slate-400 uppercase">Lista de Invitados ({invitados.length})</h3>
+              <div className="space-y-2">
+                <h3 className="text-[11px] font-bold text-slate-400 uppercase">Invitados ({invitados.length})</h3>
+                {invitados.map((inv) => (
+                  <div key={inv.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-950 border border-slate-800 p-4 rounded-xl gap-3 text-xs">
+                    <div>
+                      <span className="font-bold text-white text-sm block">{inv.nombre_asistente}</span>
+                      <span className="text-slate-400 text-[10px]">
+                        Código: <strong className="text-emerald-400 font-mono">{inv.codigo_qr}</strong> | 
+                        Estado: {inv.ingresado ? '🔴 INGRESÓ' : '🟢 PENDIENTE'}
+                      </span>
+                    </div>
 
-                {invitados.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-4 text-center">No hay invitados registrados todavía.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {invitados.map((inv) => (
-                      <div key={inv.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-950 border border-slate-800 p-4 rounded-xl gap-3 text-xs">
-                        <div>
-                          <span className="font-bold text-white text-sm block">{inv.nombre_asistente}</span>
-                          <span className="text-slate-400 text-[10px]">
-                            Código QR: <strong className="text-emerald-400 font-mono">{inv.codigo_qr}</strong> | 
-                            Estado: {inv.ingresado ? '🔴 INGRESÓ' : '🟢 PENDIENTE'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                          <button
-                            onClick={() => descargarQrInvitado(inv)}
-                            className="flex-1 sm:flex-none bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-800/50 px-3 py-1.5 rounded-lg font-bold text-[11px] transition"
-                          >
-                            📥 Descargar Pase PNG
-                          </button>
-                          <button
-                            onClick={() => setInvitadoSeleccionado(inv)}
-                            className="flex-1 sm:flex-none bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-[11px] transition"
-                          >
-                            👁️ Ver QR
-                          </button>
-                          <button
-                            onClick={() => handleEliminarInvitado(inv.id)}
-                            className="bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border border-rose-800/40 px-3 py-1.5 rounded-lg font-bold text-[11px] transition"
-                          >
-                            🗑️ Eliminar
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        onClick={() => descargarQrInvitado(inv)}
+                        className="flex-1 sm:flex-none bg-emerald-950 text-emerald-400 border border-emerald-800/50 px-3 py-1.5 rounded-lg font-bold text-[11px]"
+                      >
+                        📥 Descargar Pase PNG
+                      </button>
+                      <button
+                        onClick={() => setInvitadoSeleccionado(inv)}
+                        className="flex-1 sm:flex-none bg-slate-900 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg font-bold text-[11px]"
+                      >
+                        👁️ Ver QR
+                      </button>
+                      <button
+                        onClick={() => handleEliminarInvitado(inv.id)}
+                        className="bg-rose-950/40 text-rose-400 border border-rose-800/40 px-3 py-1.5 rounded-lg font-bold text-[11px]"
+                      >
+                        🗑️ Eliminar
+                      </button>
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
             </div>
-
           </div>
         )}
 
-        {/* PESTAÑA 2: VALIDADORES DE PUERTA */}
         {pestanaPrincipal === 'validadores' && (
           <div className="space-y-6">
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-4 shadow-xl">
-              <h2 className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider">Crear Credencial para Validador de Puerta</h2>
-              
+              <h2 className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider">Crear Credencial de Validador</h2>
               <form onSubmit={handleCrearValidador} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input
                   type="text"
-                  placeholder="Nombre Puerta (Ej: VIP / Puerta 1)"
+                  placeholder="Nombre Puerta (Ej: Puerta Principal)"
                   value={nombrePuerta}
                   onChange={(e) => setNombrePuerta(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                 />
                 <input
                   type="text"
                   required
-                  placeholder="Usuario (Ej: puerta1)"
+                  placeholder="Usuario"
                   value={usuarioVal}
                   onChange={(e) => setUsuarioVal(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                 />
                 <input
                   type="text"
                   required
                   placeholder="Contraseña"
-                  value={passwordVal}
-                  onChange={(e) => setPasswordVal(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  value={claveVal}
+                  onChange={(e) => setClaveVal(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white"
                 />
                 <button
                   type="submit"
-                  className="sm:col-span-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 rounded-xl text-xs transition shadow-lg shadow-emerald-500/20"
+                  className="sm:col-span-3 bg-emerald-500 text-slate-950 font-bold py-2.5 rounded-xl text-xs"
                 >
                   Guardar Validador
                 </button>
               </form>
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-xl space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Lista de Validadores Activos</h3>
-              {validadores.length === 0 ? (
-                <p className="text-xs text-slate-500">No se han registrado validadores aún.</p>
-              ) : (
-                <div className="space-y-2">
-                  {validadores.map((v) => (
-                    <div key={v.id} className="flex items-center justify-between bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-xs">
-                      <div>
-                        <span className="font-bold text-white block text-sm">{v.nombre_puerta}</span>
-                        <span className="text-slate-400 text-[11px]">
-                          Usuario: <strong className="text-emerald-400">{v.usuario}</strong> | Contraseña: <strong>{v.password}</strong>
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleEliminarValidador(v.id)}
-                        className="text-xs text-rose-400 hover:text-rose-300 font-bold px-3 py-1.5 rounded-lg bg-rose-950/40 border border-rose-800/40"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  ))}
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl space-y-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase">Validadores Activos</h3>
+              {validadores.map((v) => (
+                <div key={v.id} className="flex items-center justify-between bg-slate-950 border border-slate-800 p-3.5 rounded-xl text-xs">
+                  <div>
+                    <span className="font-bold text-white block text-sm">{v.nombre_puerta}</span>
+                    <span className="text-slate-400 text-[11px]">
+                      Usuario: <strong className="text-emerald-400">{v.usuario}</strong> | Contraseña: <strong>{v.clave}</strong>
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleEliminarValidador(v.id)}
+                    className="text-xs text-rose-400 font-bold px-3 py-1.5 rounded-lg bg-rose-950/40 border border-rose-800/40"
+                  >
+                    Eliminar
+                  </button>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         )}
-
       </div>
 
-      {/* MODAL VER QR INVIDUAL */}
       {invitadoSeleccionado && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full space-y-4 text-center">
             <h3 className="text-sm font-bold text-white">{invitadoSeleccionado.nombre_asistente}</h3>
             <p className="text-[11px] text-slate-400 font-mono">{invitadoSeleccionado.codigo_qr}</p>
-            
             <div className="bg-white p-4 rounded-xl inline-block">
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${invitadoSeleccionado.codigo_qr}`}
@@ -573,11 +524,10 @@ export default function AdministrarEvento() {
                 className="w-48 h-48 mx-auto"
               />
             </div>
-
             <div className="flex gap-2">
               <button
                 onClick={() => descargarQrInvitado(invitadoSeleccionado)}
-                className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2 rounded-xl text-xs"
+                className="flex-1 bg-emerald-500 text-slate-950 font-bold py-2 rounded-xl text-xs"
               >
                 📥 Descargar PNG
               </button>
@@ -591,7 +541,6 @@ export default function AdministrarEvento() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
